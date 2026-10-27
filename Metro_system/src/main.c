@@ -209,11 +209,7 @@ static void viewStation(const StationNode *root)
 
     result = readInteger("Enter station ID to search: ", &id);
 
-    if (result == 0) {
-        return;
-    }
-
-    if (result < 0) {
+    if (result <= 0) {
         return;
     }
 
@@ -227,6 +223,108 @@ static void viewStation(const StationNode *root)
     displayStation(&node->station);
 }
 
+/*
+ * Validates whether the selected source and destination stations
+ * exist in the AVL tree. This function does not calculate a route
+ * or check physical rail connectivity.
+ */
+static void validateSourceDestination(const StationNode *root,
+                                      const User *user)
+{
+    int sourceId;
+    int destinationId;
+    int result;
+    StationNode *source;
+    StationNode *destination;
+
+    printf("\n========== SOURCE/DESTINATION VALIDATION ==========\n");
+
+    /* Edge case: no stations are loaded. */
+    if (root == NULL) {
+        printf("Validation failed: No stations are available.\n");
+
+        logEvent(user->username,
+                 "SOURCE_DESTINATION_VALIDATION",
+                 "Validation failed: empty AVL tree",
+                 APP_NOT_FOUND);
+        return;
+    }
+
+    result = readInteger("Enter source station ID: ", &sourceId);
+
+    if (result <= 0) {
+        return;
+    }
+
+    result = readInteger("Enter destination station ID: ",
+                         &destinationId);
+
+    if (result <= 0) {
+        return;
+    }
+
+    /* Station IDs must be positive. */
+    if (sourceId <= 0 || destinationId <= 0) {
+        printf("Validation failed: Station IDs must be positive.\n");
+
+        logEvent(user->username,
+                 "SOURCE_DESTINATION_VALIDATION",
+                 "Invalid non-positive station ID",
+                 APP_INVALID_INPUT);
+        return;
+    }
+
+    /* Source and destination must be different stations. */
+    if (sourceId == destinationId) {
+        printf("Validation failed: Source and destination must be different.\n");
+
+        logEvent(user->username,
+                 "SOURCE_DESTINATION_VALIDATION",
+                 "Source and destination IDs are identical",
+                 APP_INVALID_INPUT);
+        return;
+    }
+
+    /* Search for both station IDs in the AVL tree. */
+    source = searchStation((StationNode *)root, sourceId);
+    destination = searchStation((StationNode *)root, destinationId);
+
+    /* Report missing source and destination independently. */
+    if (source == NULL) {
+        printf("Source station ID %d was not found.\n", sourceId);
+    }
+
+    if (destination == NULL) {
+        printf("Destination station ID %d was not found.\n",
+               destinationId);
+    }
+
+    if (source == NULL || destination == NULL) {
+        printf("Validation result: FAILED.\n");
+
+        logEvent(user->username,
+                 "SOURCE_DESTINATION_VALIDATION",
+                 "One or both station IDs were not found",
+                 APP_NOT_FOUND);
+        return;
+    }
+
+    /* Both stations exist: display their complete station records. */
+    printf("\nSource station is available:\n");
+    displayStation(&source->station);
+
+    printf("\nDestination station is available:\n");
+    displayStation(&destination->station);
+
+    printf("\nValidation result: SUCCESS.\n");
+    printf("Both stations exist in the AVL tree.\n");
+
+    logEvent(user->username,
+             "SOURCE_DESTINATION_VALIDATION",
+             "Both station IDs validated successfully",
+             APP_SUCCESS);
+}
+
 static void addStation(StationNode **root, const User *user)
 {
     Station station;
@@ -235,6 +333,7 @@ static void addStation(StationNode **root, const User *user)
 
     if (!hasPermission(user->role, "ADD")) {
         printf("Permission denied: Admin access is required.\n");
+
         logEvent(user->username, "ADD", "Permission denied",
                  APP_PERMISSION_DENIED);
         return;
@@ -243,6 +342,7 @@ static void addStation(StationNode **root, const User *user)
     memset(&station, 0, sizeof(station));
 
     result = readStationDetails(&station, 1);
+
     if (result <= 0) {
         return;
     }
@@ -254,7 +354,8 @@ static void addStation(StationNode **root, const User *user)
                ? "A station with that ID already exists.\n"
                : "Could not add station (invalid data or memory error).\n");
 
-        logEvent(user->username, "ADD", "Station insertion failed", status);
+        logEvent(user->username, "ADD",
+                 "Station insertion failed", status);
         return;
     }
 
@@ -262,13 +363,15 @@ static void addStation(StationNode **root, const User *user)
 
     if (status != APP_SUCCESS) {
         printf("Warning: station added in memory, but saving to CSV failed.\n");
+
         logEvent(user->username, "ADD", "CSV save failed", status);
         return;
     }
 
     printf("Station added and saved successfully.\n");
-    logEvent(user->username, "ADD", "Station added successfully",
-             APP_SUCCESS);
+
+    logEvent(user->username, "ADD",
+             "Station added successfully", APP_SUCCESS);
 }
 
 static void updateStationDetails(StationNode **root, const User *user)
@@ -282,12 +385,14 @@ static void updateStationDetails(StationNode **root, const User *user)
 
     if (!hasPermission(user->role, "UPDATE")) {
         printf("Permission denied: Admin access is required.\n");
+
         logEvent(user->username, "UPDATE", "Permission denied",
                  APP_PERMISSION_DENIED);
         return;
     }
 
     result = readInteger("Enter station ID to update: ", &id);
+
     if (result <= 0) {
         return;
     }
@@ -296,8 +401,9 @@ static void updateStationDetails(StationNode **root, const User *user)
 
     if (node == NULL) {
         printf("Station not found.\n");
-        logEvent(user->username, "UPDATE", "Station not found",
-                 APP_NOT_FOUND);
+
+        logEvent(user->username, "UPDATE",
+                 "Station not found", APP_NOT_FOUND);
         return;
     }
 
@@ -306,6 +412,7 @@ static void updateStationDetails(StationNode **root, const User *user)
     printf("Enter the new details for station ID %d.\n", id);
 
     result = readStationDetails(&updated, 0);
+
     if (result <= 0) {
         return;
     }
@@ -314,6 +421,7 @@ static void updateStationDetails(StationNode **root, const User *user)
 
     if (status != APP_SUCCESS) {
         printf("Could not update station.\n");
+
         logEvent(user->username, "UPDATE", "Update failed", status);
         return;
     }
@@ -322,13 +430,17 @@ static void updateStationDetails(StationNode **root, const User *user)
 
     if (status != APP_SUCCESS) {
         printf("Warning: station updated in memory, but saving to CSV failed.\n");
+
         logEvent(user->username, "UPDATE", "CSV save failed", status);
         return;
     }
 
     snprintf(details, sizeof(details), "Station ID %d updated", id);
+
     printf("Station updated and saved successfully.\n");
-    logEvent(user->username, "UPDATE", details, APP_SUCCESS);
+
+    logEvent(user->username, "UPDATE",
+             details, APP_SUCCESS);
 }
 
 static void deleteStationById(StationNode **root, const User *user)
@@ -340,12 +452,14 @@ static void deleteStationById(StationNode **root, const User *user)
 
     if (!hasPermission(user->role, "DELETE")) {
         printf("Permission denied: Admin access is required.\n");
+
         logEvent(user->username, "DELETE", "Permission denied",
                  APP_PERMISSION_DENIED);
         return;
     }
 
     result = readInteger("Enter station ID to delete: ", &id);
+
     if (result <= 0) {
         return;
     }
@@ -354,7 +468,9 @@ static void deleteStationById(StationNode **root, const User *user)
 
     if (status != APP_SUCCESS) {
         printf("Station not found or could not be deleted.\n");
-        logEvent(user->username, "DELETE", "Deletion failed", status);
+
+        logEvent(user->username, "DELETE",
+                 "Deletion failed", status);
         return;
     }
 
@@ -362,13 +478,17 @@ static void deleteStationById(StationNode **root, const User *user)
 
     if (status != APP_SUCCESS) {
         printf("Warning: station deleted in memory, but saving to CSV failed.\n");
+
         logEvent(user->username, "DELETE", "CSV save failed", status);
         return;
     }
 
     snprintf(details, sizeof(details), "Station ID %d deleted", id);
+
     printf("Station deleted and changes saved successfully.\n");
-    logEvent(user->username, "DELETE", details, APP_SUCCESS);
+
+    logEvent(user->username, "DELETE",
+             details, APP_SUCCESS);
 }
 
 static void showMenu(UserRole role)
@@ -377,14 +497,15 @@ static void showMenu(UserRole role)
     printf("1. Display all stations\n");
     printf("2. Search station by ID\n");
     printf("3. Station summary\n");
+    printf("4. Source/Destination Validation\n");
 
     if (role == ROLE_ADMIN) {
-        printf("4. Add station\n");
-        printf("5. Update station\n");
-        printf("6. Delete station\n");
+        printf("5. Add station\n");
+        printf("6. Update station\n");
+        printf("7. Delete station\n");
     }
 
-    printf("7. Logout\n");
+    printf("8. Logout\n");
     printf("0. Exit application\n");
     printf("=============================================\n");
 }
@@ -421,38 +542,37 @@ static int runUserSession(StationNode **root, const User *user)
                 break;
 
             case 4:
-                if (user->role == ROLE_ADMIN) {
-                    addStation(root, user);
-                } else {
-                    printf("Permission denied.\n");
-                    logEvent(user->username, "ADD",
-                             "Permission denied", APP_PERMISSION_DENIED);
-                }
+                validateSourceDestination(*root, user);
                 break;
 
             case 5:
                 if (user->role == ROLE_ADMIN) {
-                    updateStationDetails(root, user);
+                    addStation(root, user);
                 } else {
-                    printf("Permission denied.\n");
-                    logEvent(user->username, "UPDATE",
-                             "Permission denied", APP_PERMISSION_DENIED);
+                    printf("Invalid option for Viewer.\n");
                 }
                 break;
 
             case 6:
                 if (user->role == ROLE_ADMIN) {
-                    deleteStationById(root, user);
+                    updateStationDetails(root, user);
                 } else {
-                    printf("Permission denied.\n");
-                    logEvent(user->username, "DELETE",
-                             "Permission denied", APP_PERMISSION_DENIED);
+                    printf("Invalid option for Viewer.\n");
                 }
                 break;
 
             case 7:
+                if (user->role == ROLE_ADMIN) {
+                    deleteStationById(root, user);
+                } else {
+                    printf("Invalid option for Viewer.\n");
+                }
+                break;
+
+            case 8:
                 logEvent(user->username, "LOGOUT",
                          "User logged out", APP_SUCCESS);
+
                 printf("Logged out successfully.\n");
                 return 1;
 
@@ -484,6 +604,7 @@ int main(void)
         fprintf(stderr,
                 "Error: station data could not be loaded completely.\n"
                 "Check data/stations.csv before restarting.\n");
+
         freeStationTree(root);
         return EXIT_FAILURE;
     }
@@ -522,14 +643,15 @@ int main(void)
 
         if (status != APP_SUCCESS) {
             printf("Login failed. Check your credentials.\n");
+
             logEvent(username, "LOGIN", "Login failed", status);
             continue;
         }
 
-        logEvent(user.username, "LOGIN", "Login successful", APP_SUCCESS);
+        logEvent(user.username, "LOGIN",
+                 "Login successful", APP_SUCCESS);
 
-        printf("\nWelcome, %s!\n",
-               user.username);
+        printf("\nWelcome, %s!\n", user.username);
         printf("Role: %s\n",
                user.role == ROLE_ADMIN ? "Admin" : "Viewer");
 
