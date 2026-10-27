@@ -1,0 +1,7 @@
+id,name,distance,fare,platform
+101,Central Railway Station,0.00,10.00,1
+102,Park Avenue,3.50,15.00,2
+103,Nehru Stadium,7.20,22.00,1
+104,Tech City Hub,12.80,35.00,3
+105,University Campus,18.40,45.00,2
+106,International Airport,26.00,60.00,4

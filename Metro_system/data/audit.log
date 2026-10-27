@@ -1,0 +1,14 @@
+[2026-10-27 04:11:36] user=admin action=LOGIN details=Authentication successful result=0
+[2026-10-27 04:11:36] user=viewer action=DELETE details=Permission denied result=5
+[2026-10-27 04:25:23] user=admin  action=LOGIN details=Login failed result=5
+[2026-10-27 04:25:41] user=admin action=LOGIN details=Login successful result=0
+[2026-10-27 04:28:29] user=admin action=ADD details=Station added successfully result=0
+[2026-10-27 04:29:44] user=admin action=UPDATE details=Station ID 107 updated result=0
+[2026-10-27 04:29:59] user=admin action=DELETE details=Station ID 107 deleted result=0
+[2026-10-27 04:30:11] user=admin action=LOGOUT details=User logged out result=0
+[2026-10-27 04:31:01] user=viewer action=LOGIN details=Login successful result=0
+[2026-10-27 04:31:36] user=viewer action=LOGOUT details=User logged out result=0
+[2026-10-27 04:31:48] user=admin action=LOGIN details=Login successful result=0
+[2026-10-27 04:31:56] user=admin action=EXIT details=Application exit requested result=0
+[2026-10-27 04:47:20] user=admin action=LOGIN details=Login successful result=0
+[2026-10-27 04:47:41] user=admin action=EXIT details=Application exit requested result=0
