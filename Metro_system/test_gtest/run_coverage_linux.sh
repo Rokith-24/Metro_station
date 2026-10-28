@@ -48,7 +48,7 @@ g++ "${CXXFLAGS[@]}" test_gtest/test_metro_gtest.cpp \
   build/gtest/main_test.o build/gtest/bst.o build/gtest/storage.o \
   build/gtest/auth.o build/gtest/audit_log.o \
   build/gtest/station_validation_threads.o \
-  -lgtest -pthread -lm -o build/gtest/metro_gtest
+  -lgtest -pthread -lm -lstdc++fs -o build/gtest/metro_gtest
 
 ./build/gtest/metro_gtest
 
