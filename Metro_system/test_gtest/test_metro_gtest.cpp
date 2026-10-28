@@ -452,32 +452,35 @@ TEST(ZIntegrationTest, ExercisesLoginMenusStationCrudAndExitPaths) {
     writeDefaultUsers();
     writeText("data/audit.log", "");
 
+    
     const std::string script =
         "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\n" // overlong username
         "admin\nadmin123\n"
-        "abc\n"                  // invalid menu integer
-        "99\n"                   // invalid menu option
-        "1\n"                    // display stations
-        "2\n101\n"              // found station
-        "2\n999\n"              // missing station
-        "3\n"                    // summary
-        "4\n101\n106\n"        // valid source/destination
-        "4\n999\n106\n"        // missing source
-        "4\n101\n101\n"        // same source/destination
-        "4\n-1\n106\n"         // invalid ID
-        "5\n108\n\n"           // empty station name
-        "5\n108\nTemp\nnot-a-number\n" // invalid float
-        "5\n107\nTestStop\n2.5\n12.5\n2\n" // add
-        "6\n107\nUpdatedStop\n3.5\n13.5\n3\n" // update
-        "7\n107\n"              // delete
-        "8\n"                   // logout
+        "abc\n"                       // invalid menu input
+        "99\n"                        // invalid menu option
+        "1\n"                         // display stations
+        "2\n101\n"                    // search existing station
+        "2\n999\n"                    // search missing station
+        "3\n"                         // summary
+        "4\n101\n106\n"               // valid source/destination
+        "4\n999\n106\n"               // missing source
+        "4\n101\n101\n"               // same source/destination
+        "4\n-1\n106\n"                // invalid ID
+        "5\n"                         // threaded station validation
+        "6\n108\n\n"                  // add: empty name
+        "6\n108\nTemp\nnot-a-number\n"// add: invalid float
+        "6\n107\nTestStop\n2.5\n12.5\n2\n" // add station
+        "7\n107\nUpdatedStop\n3.5\n13.5\n3\n" // update station
+        "8\n107\n"                    // delete station
+        "9\n"                         // logout
         "viewer\nviewer123\n"
-        "5\n"                   // viewer cannot use admin option
-        "2\n999\n"              // viewer search missing station
-        "8\n"
-        "baduser\nbadpass\n"   // failed login
+        "7\n"                         // viewer cannot update
+        "2\n999\n"                    // viewer search missing station
+        "9\n"                         // logout
+        "baduser\nbadpass\n"          // failed login
         "admin\nadmin123\n"
-        "0\n";                  // exit
+        "0\n";                        // exit application
+
 
     fs::path inputPath = testRoot / "app_input.txt";
     writeText(inputPath, script);
