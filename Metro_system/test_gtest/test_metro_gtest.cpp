@@ -1,3 +1,4 @@
+
 #include <gtest/gtest.h>
 
 #include <cstdio>
@@ -120,12 +121,18 @@ TEST(AvlPublicApi, CreateNodeInitializesFieldsAndCanBeFreed) {
 }
 
 TEST_F(AvlTest, InsertsAndBalancesAllFourRotationPatterns) {
-    const int cases[4][3] = {{30,20,10}, {10,20,30}, {30,10,20}, {10,30,20}};
+    const int cases[4][3] = {
+        {30, 20, 10}, {10, 20, 30},
+        {30, 10, 20}, {10, 30, 20}
+    };
+
     for (const auto& ids : cases) {
         StationNode* local = nullptr;
         for (int id : ids) {
-            ASSERT_EQ(insertStation(&local, makeStation(id, "Node")), APP_SUCCESS);
+            ASSERT_EQ(insertStation(&local, makeStation(id, "Node")),
+                      APP_SUCCESS);
         }
+
         ASSERT_NE(local, nullptr);
         EXPECT_EQ(local->station.id, 20);
         EXPECT_EQ(local->height, 2);
@@ -136,15 +143,31 @@ TEST_F(AvlTest, InsertsAndBalancesAllFourRotationPatterns) {
 }
 
 TEST_F(AvlTest, RejectsInvalidInputsAndDuplicateIds) {
-    EXPECT_EQ(insertStation(nullptr, makeStation(1, "One")), APP_INVALID_INPUT);
-    EXPECT_EQ(insertStation(&root, makeStation(0, "Zero")), APP_INVALID_INPUT);
-    EXPECT_EQ(insertStation(&root, makeStation(1, "")), APP_INVALID_INPUT);
-    EXPECT_EQ(insertStation(&root, makeStation(1, "Negative", -1.0f)), APP_INVALID_INPUT);
-    EXPECT_EQ(insertStation(&root, makeStation(1, "NaN", std::numeric_limits<float>::quiet_NaN())), APP_INVALID_INPUT);
-    EXPECT_EQ(insertStation(&root, makeStation(1, "Inf", std::numeric_limits<float>::infinity())), APP_INVALID_INPUT);
-    EXPECT_EQ(insertStation(&root, makeStation(1, "Fare", 1.0f, -1.0f)), APP_INVALID_INPUT);
-    EXPECT_EQ(insertStation(&root, makeStation(1, "FareNaN", 1.0f, std::numeric_limits<float>::quiet_NaN())), APP_INVALID_INPUT);
-    EXPECT_EQ(insertStation(&root, makeStation(1, "Platform", 1.0f, 1.0f, 0)), APP_INVALID_INPUT);
+    EXPECT_EQ(insertStation(nullptr, makeStation(1, "One")),
+              APP_INVALID_INPUT);
+    EXPECT_EQ(insertStation(&root, makeStation(0, "Zero")),
+              APP_INVALID_INPUT);
+    EXPECT_EQ(insertStation(&root, makeStation(1, "")),
+              APP_INVALID_INPUT);
+    EXPECT_EQ(insertStation(&root, makeStation(1, "Negative", -1.0f)),
+              APP_INVALID_INPUT);
+    EXPECT_EQ(insertStation(&root,
+              makeStation(1, "NaN",
+                  std::numeric_limits<float>::quiet_NaN())),
+              APP_INVALID_INPUT);
+    EXPECT_EQ(insertStation(&root,
+              makeStation(1, "Inf", 1.0f,
+                  std::numeric_limits<float>::infinity())),
+              APP_INVALID_INPUT);
+    EXPECT_EQ(insertStation(&root, makeStation(1, "Fare", 1.0f, -1.0f)),
+              APP_INVALID_INPUT);
+    EXPECT_EQ(insertStation(&root,
+              makeStation(1, "FareNaN", 1.0f,
+                  std::numeric_limits<float>::quiet_NaN())),
+              APP_INVALID_INPUT);
+    EXPECT_EQ(insertStation(&root, makeStation(1, "Platform", 1.0f, 1.0f, 0)),
+              APP_INVALID_INPUT);
+
     Station unterminated{};
     unterminated.id = 1;
     std::memset(unterminated.name, 'X', sizeof(unterminated.name));
@@ -152,14 +175,17 @@ TEST_F(AvlTest, RejectsInvalidInputsAndDuplicateIds) {
     unterminated.fare = 1.0f;
     unterminated.platform = 1;
     EXPECT_EQ(insertStation(&root, unterminated), APP_INVALID_INPUT);
+
     EXPECT_EQ(insertStation(&root, makeStation(10, "Ten")), APP_SUCCESS);
-    EXPECT_EQ(insertStation(&root, makeStation(10, "Duplicate")), APP_DUPLICATE);
+    EXPECT_EQ(insertStation(&root, makeStation(10, "Duplicate")),
+              APP_DUPLICATE);
     EXPECT_EQ(countStations(root), 1);
 }
 
 TEST_F(AvlTest, SearchCountAndMinimumMaximumHandleEmptyAndPopulatedTrees) {
     EXPECT_EQ(countStations(nullptr), 0);
     EXPECT_EQ(searchStation(nullptr, 1), nullptr);
+
     int id = -99;
     EXPECT_EQ(findMinimumStationId(nullptr, &id), 0);
     EXPECT_EQ(findMaximumStationId(nullptr, &id), 0);
@@ -169,10 +195,12 @@ TEST_F(AvlTest, SearchCountAndMinimumMaximumHandleEmptyAndPopulatedTrees) {
     ASSERT_EQ(insertStation(&root, makeStation(20, "Twenty")), APP_SUCCESS);
     ASSERT_EQ(insertStation(&root, makeStation(10, "Ten")), APP_SUCCESS);
     ASSERT_EQ(insertStation(&root, makeStation(30, "Thirty")), APP_SUCCESS);
+
     EXPECT_EQ(countStations(root), 3);
     EXPECT_EQ(searchStation(root, 10)->station.id, 10);
     EXPECT_EQ(searchStation(root, 30)->station.id, 30);
     EXPECT_EQ(searchStation(root, 99), nullptr);
+
     ASSERT_EQ(findMinimumStationId(root, &id), 1);
     EXPECT_EQ(id, 10);
     ASSERT_EQ(findMaximumStationId(root, &id), 1);
@@ -181,16 +209,22 @@ TEST_F(AvlTest, SearchCountAndMinimumMaximumHandleEmptyAndPopulatedTrees) {
 
 TEST_F(AvlTest, UpdateValidatesIdDataAndMissingStations) {
     Station updated = makeStation(5, "Updated", 9.0f, 25.0f, 4);
+
     EXPECT_EQ(updateStation(nullptr, 5, updated), APP_NOT_FOUND);
     EXPECT_EQ(updateStation(root, 0, updated), APP_INVALID_INPUT);
-    EXPECT_EQ(updateStation(root, 5, makeStation(6, "Mismatch")), APP_INVALID_INPUT);
-    EXPECT_EQ(updateStation(root, 5, makeStation(5, "")), APP_INVALID_INPUT);
+    EXPECT_EQ(updateStation(root, 5, makeStation(6, "Mismatch")),
+              APP_INVALID_INPUT);
+    EXPECT_EQ(updateStation(root, 5, makeStation(5, "")),
+              APP_INVALID_INPUT);
+
     ASSERT_EQ(insertStation(&root, makeStation(5, "Before")), APP_SUCCESS);
     EXPECT_EQ(updateStation(root, 5, updated), APP_SUCCESS);
+
     ASSERT_NE(searchStation(root, 5), nullptr);
     EXPECT_STREQ(searchStation(root, 5)->station.name, "Updated");
     EXPECT_FLOAT_EQ(searchStation(root, 5)->station.fare, 25.0f);
-    EXPECT_EQ(updateStation(root, 9, makeStation(9, "Missing")), APP_NOT_FOUND);
+    EXPECT_EQ(updateStation(root, 9, makeStation(9, "Missing")),
+              APP_NOT_FOUND);
 }
 
 TEST_F(AvlTest, DeletesLeafOneChildTwoChildrenAndMissingKeys) {
@@ -201,11 +235,12 @@ TEST_F(AvlTest, DeletesLeafOneChildTwoChildrenAndMissingKeys) {
     for (int id : {40, 20, 60, 10, 30, 50, 70, 25}) {
         ASSERT_EQ(insertStation(&root, makeStation(id, "Node")), APP_SUCCESS);
     }
+
     EXPECT_EQ(deleteStation(&root, 999), APP_NOT_FOUND);
     EXPECT_EQ(countStations(root), 8);
-    EXPECT_EQ(deleteStation(&root, 10), APP_SUCCESS); // leaf
-    EXPECT_EQ(deleteStation(&root, 30), APP_SUCCESS); // node with one child (25)
-    EXPECT_EQ(deleteStation(&root, 40), APP_SUCCESS); // node with two children
+    EXPECT_EQ(deleteStation(&root, 10), APP_SUCCESS);
+    EXPECT_EQ(deleteStation(&root, 30), APP_SUCCESS);
+    EXPECT_EQ(deleteStation(&root, 40), APP_SUCCESS);
     EXPECT_EQ(searchStation(root, 40), nullptr);
     EXPECT_EQ(countStations(root), 5);
 }
@@ -218,6 +253,7 @@ TEST_F(AvlTest, DisplayFunctionsAcceptNullAndPrintStationData) {
     EXPECT_NE(emptyOutput.find("No stations available"), std::string::npos);
 
     ASSERT_EQ(insertStation(&root, makeStation(12, "DisplayMe")), APP_SUCCESS);
+
     testing::internal::CaptureStdout();
     displayStation(&root->station);
     displayStationsInOrder(root);
@@ -237,12 +273,15 @@ TEST(StorageApi, RejectsNullArgumentsAndMissingFile) {
 
 TEST(StorageApi, LoadsValidRowsAndReportsMalformedOrDuplicateRows) {
     StationNode* root = nullptr;
+
     writeText("data/storage_valid.csv",
         "id,name,distance,fare,platform\n"
         "3,Third,3.5,12.0,2\n"
         "1,First,0,0,1\r\n"
         "2,Second,2.0,7.5,4\n");
-    EXPECT_EQ(loadStationsFromCSV(&root, "data/storage_valid.csv"), APP_SUCCESS);
+
+    EXPECT_EQ(loadStationsFromCSV(&root, "data/storage_valid.csv"),
+              APP_SUCCESS);
     EXPECT_EQ(countStations(root), 3);
     EXPECT_EQ(searchStation(root, 1)->station.platform, 1);
     freeStationTree(root);
@@ -252,35 +291,57 @@ TEST(StorageApi, LoadsValidRowsAndReportsMalformedOrDuplicateRows) {
         "id,name,distance,fare,platform\n"
         "1,First,1,1,1\n"
         "bad,Malformed,1,1,1\n"
-        "1,Duplicate,1,1,1\n"
-        "2,NegativeDistance,-1,1,1\n"
-        "3,TooMany,1,1,1,extra\n");
-    EXPECT_NE(loadStationsFromCSV(&root, "data/storage_invalid.csv"), APP_SUCCESS);
+        "2147483648,IDOverflow,1,1,1\n"
+        "2,TooLongStationNameBeyondLimit123456789ABCDEFGHIJKLMN,1,1,1\n"
+        "3,BadDistance,abc,1,1\n"
+        "4,InfiniteDistance,inf,1,1\n"
+        "5,NegativeDistance,-1,1,1\n"
+        "6,BadFare,1,abc,1\n"
+        "7,InfiniteFare,1,inf,1\n"
+        "8,NegativeFare,1,-1,1\n"
+        "9,BadPlatform,1,1,x\n"
+        "10,PlatformOverflow,1,1,2147483648\n"
+        "11,ZeroPlatform,1,1,0\n"
+        "12,TooFewFields,1,1\n"
+        "13,TooMany,1,1,1,extra\n"
+        "1,Duplicate,1,1,1\n");
+
+    EXPECT_NE(loadStationsFromCSV(&root, "data/storage_invalid.csv"),
+              APP_SUCCESS);
     EXPECT_EQ(countStations(root), 1);
     EXPECT_NE(searchStation(root, 1), nullptr);
     freeStationTree(root);
     root = nullptr;
 
-    // A header is optional; a first line that is a data record is parsed.
+    writeText("data/storage_blank_rows.csv", "\n,\n");
+    EXPECT_EQ(loadStationsFromCSV(&root, "data/storage_blank_rows.csv"),
+              APP_ERROR);
+    EXPECT_EQ(countStations(root), 0);
+
     writeText("data/storage_no_header.csv", "9,Nine,9.0,9.0,1\n");
-    EXPECT_EQ(loadStationsFromCSV(&root, "data/storage_no_header.csv"), APP_SUCCESS);
+    EXPECT_EQ(loadStationsFromCSV(&root, "data/storage_no_header.csv"),
+              APP_SUCCESS);
     EXPECT_EQ(countStations(root), 1);
     freeStationTree(root);
     root = nullptr;
 
     writeText("data/storage_empty.csv", "");
-    EXPECT_EQ(loadStationsFromCSV(&root, "data/storage_empty.csv"), APP_SUCCESS);
+    EXPECT_EQ(loadStationsFromCSV(&root, "data/storage_empty.csv"),
+              APP_SUCCESS);
     EXPECT_EQ(countStations(root), 0);
 }
 
 TEST(StorageApi, SavesInSortedOrderAndRoundTripsEmptyAndPopulatedTrees) {
     StationNode* root = nullptr;
+
     EXPECT_EQ(saveStationsToCSV(root, "data/empty.csv"), APP_SUCCESS);
-    EXPECT_EQ(readText("data/empty.csv"), "id,name,distance,fare,platform\n");
+    EXPECT_EQ(readText("data/empty.csv"),
+              "id,name,distance,fare,platform\n");
 
     ASSERT_EQ(insertStation(&root, makeStation(20, "Twenty")), APP_SUCCESS);
     ASSERT_EQ(insertStation(&root, makeStation(10, "Ten")), APP_SUCCESS);
     ASSERT_EQ(insertStation(&root, makeStation(30, "Thirty")), APP_SUCCESS);
+
     EXPECT_EQ(saveStationsToCSV(root, "data/roundtrip.csv"), APP_SUCCESS);
     std::string saved = readText("data/roundtrip.csv");
     EXPECT_LT(saved.find("10,Ten"), saved.find("20,Twenty"));
@@ -290,6 +351,7 @@ TEST(StorageApi, SavesInSortedOrderAndRoundTripsEmptyAndPopulatedTrees) {
     EXPECT_EQ(loadStationsFromCSV(&loaded, "data/roundtrip.csv"), APP_SUCCESS);
     EXPECT_EQ(countStations(loaded), 3);
     EXPECT_NE(searchStation(loaded, 20), nullptr);
+
     freeStationTree(root);
     freeStationTree(loaded);
 }
@@ -297,17 +359,21 @@ TEST(StorageApi, SavesInSortedOrderAndRoundTripsEmptyAndPopulatedTrees) {
 TEST(AuthApi, AcceptsAdminViewerAndRejectsBadCredentials) {
     writeDefaultUsers();
     User user{};
+
     EXPECT_EQ(authenticateUser("admin", "admin123", &user), APP_SUCCESS);
     EXPECT_EQ(user.role, ROLE_ADMIN);
     EXPECT_STREQ(user.username, "admin");
+
     EXPECT_EQ(authenticateUser("viewer", "viewer123", &user), APP_SUCCESS);
     EXPECT_EQ(user.role, ROLE_VIEWER);
+
     EXPECT_EQ(authenticateUser("admin", "wrong", &user), APP_PERMISSION_DENIED);
     EXPECT_EQ(authenticateUser("unknown", "pass", &user), APP_PERMISSION_DENIED);
 }
 
 TEST(AuthApi, HandlesInvalidArgumentsAndFileErrors) {
     User user{};
+
     EXPECT_EQ(authenticateUser(nullptr, "pass", &user), APP_INVALID_INPUT);
     EXPECT_EQ(authenticateUser("user", nullptr, &user), APP_INVALID_INPUT);
     EXPECT_EQ(authenticateUser("user", "pass", nullptr), APP_INVALID_INPUT);
@@ -316,6 +382,7 @@ TEST(AuthApi, HandlesInvalidArgumentsAndFileErrors) {
 
     writeText("data/users.csv", "");
     EXPECT_EQ(authenticateUser("admin", "admin123", &user), APP_ERROR);
+
     fs::remove("data/users.csv");
     EXPECT_EQ(authenticateUser("admin", "admin123", &user), APP_ERROR);
     writeDefaultUsers();
@@ -327,9 +394,16 @@ TEST(AuthApi, SkipsMalformedRowsAndRejectsUnknownRole) {
         "badrow\n"
         "admin,secret,ROOT\n"
         "viewer,viewer123,VIEWER\n");
+
     User user{};
     EXPECT_EQ(authenticateUser("viewer", "viewer123", &user), APP_SUCCESS);
     EXPECT_EQ(authenticateUser("admin", "secret", &user), APP_ERROR);
+
+    const std::string longUsername(USERNAME_MAX + 8, 'u');
+    writeText("data/users.csv",
+        "username,password,role\n" + longUsername + ",pw,ADMIN\n");
+    EXPECT_EQ(authenticateUser(longUsername.c_str(), "pw", &user), APP_ERROR);
+
     writeDefaultUsers();
 }
 
@@ -339,11 +413,13 @@ TEST(AuthApi, CoversPermissionMatrixAndUnknownInputs) {
     EXPECT_TRUE(hasPermission(ROLE_ADMIN, "ADD"));
     EXPECT_TRUE(hasPermission(ROLE_ADMIN, "UPDATE"));
     EXPECT_TRUE(hasPermission(ROLE_ADMIN, "DELETE"));
+
     EXPECT_TRUE(hasPermission(ROLE_VIEWER, "VIEW"));
     EXPECT_TRUE(hasPermission(ROLE_VIEWER, "SEARCH"));
     EXPECT_FALSE(hasPermission(ROLE_VIEWER, "ADD"));
     EXPECT_FALSE(hasPermission(ROLE_VIEWER, "UPDATE"));
     EXPECT_FALSE(hasPermission(ROLE_VIEWER, "DELETE"));
+
     EXPECT_FALSE(hasPermission(ROLE_ADMIN, "UNKNOWN"));
     EXPECT_FALSE(hasPermission(ROLE_ADMIN, nullptr));
     EXPECT_FALSE(hasPermission(static_cast<UserRole>(99), "VIEW"));
@@ -351,39 +427,58 @@ TEST(AuthApi, CoversPermissionMatrixAndUnknownInputs) {
 }
 
 TEST(AuditLogApi, RejectsNullArgumentsAndAppendsEntries) {
-    EXPECT_EQ(writeAuditLog(nullptr, "LOGIN", "ok", APP_SUCCESS), APP_INVALID_INPUT);
-    EXPECT_EQ(writeAuditLog("admin", nullptr, "ok", APP_SUCCESS), APP_INVALID_INPUT);
-    EXPECT_EQ(writeAuditLog("admin", "LOGIN", nullptr, APP_SUCCESS), APP_INVALID_INPUT);
+    EXPECT_EQ(writeAuditLog(nullptr, "LOGIN", "ok", APP_SUCCESS),
+              APP_INVALID_INPUT);
+    EXPECT_EQ(writeAuditLog("admin", nullptr, "ok", APP_SUCCESS),
+              APP_INVALID_INPUT);
+    EXPECT_EQ(writeAuditLog("admin", "LOGIN", nullptr, APP_SUCCESS),
+              APP_INVALID_INPUT);
+
     writeText("data/audit.log", "");
-    EXPECT_EQ(writeAuditLog("admin", "LOGIN", "Authentication successful", APP_SUCCESS), APP_SUCCESS);
-    EXPECT_EQ(writeAuditLog("viewer", "DELETE", "Permission denied", APP_PERMISSION_DENIED), APP_SUCCESS);
+    EXPECT_EQ(writeAuditLog("admin", "LOGIN", "Authentication successful",
+                            APP_SUCCESS), APP_SUCCESS);
+    EXPECT_EQ(writeAuditLog("viewer", "DELETE", "Permission denied",
+                            APP_PERMISSION_DENIED), APP_SUCCESS);
+
     std::string log = readText("data/audit.log");
-    EXPECT_NE(log.find("user=admin action=LOGIN details=Authentication successful result=0"), std::string::npos);
-    EXPECT_NE(log.find("user=viewer action=DELETE details=Permission denied result=5"), std::string::npos);
+    EXPECT_NE(log.find(
+        "user=admin action=LOGIN details=Authentication successful result=0"),
+        std::string::npos);
+    EXPECT_NE(log.find(
+        "user=viewer action=DELETE details=Permission denied result=5"),
+        std::string::npos);
 }
 
 TEST(AuditLogApi, ReturnsErrorWhenAuditPathCannotBeOpened) {
     fs::remove("data/audit.log");
     fs::create_directory("data/audit.log");
-    EXPECT_EQ(writeAuditLog("admin", "LOGIN", "cannot write", APP_SUCCESS), APP_ERROR);
+
+    EXPECT_EQ(writeAuditLog("admin", "LOGIN", "cannot write", APP_SUCCESS),
+              APP_ERROR);
+
     fs::remove_all("data/audit.log");
     writeText("data/audit.log", "");
 }
 
 TEST(StationValidationThreads, NullAndEmptyReports) {
-    EXPECT_EQ(generateStationValidationReport(nullptr, nullptr), APP_INVALID_INPUT);
+    EXPECT_EQ(generateStationValidationReport(nullptr, nullptr),
+              APP_INVALID_INPUT);
+
     StationValidationReport report{};
     EXPECT_EQ(generateStationValidationReport(nullptr, &report), APP_SUCCESS);
     EXPECT_EQ(report.station_count, 0u);
     EXPECT_EQ(report.invalid_count, 0u);
     EXPECT_EQ(report.stations, nullptr);
     EXPECT_EQ(report.issue_flags, nullptr);
+
     testing::internal::CaptureStdout();
     displayStationValidationReport(nullptr);
     displayStationValidationReport(&report);
     std::string output = testing::internal::GetCapturedStdout();
+
     EXPECT_NE(output.find("report is unavailable"), std::string::npos);
     EXPECT_NE(output.find("No stations are available"), std::string::npos);
+
     freeStationValidationReport(nullptr);
     freeStationValidationReport(&report);
 }
@@ -393,6 +488,7 @@ TEST(StationValidationThreads, ReportsValidStationsAndSplitsWorkAcrossThreads) {
     for (int id : {10, 20, 30, 40, 50}) {
         ASSERT_EQ(insertStation(&root, makeStation(id, "Valid")), APP_SUCCESS);
     }
+
     StationValidationReport report{};
     ASSERT_EQ(generateStationValidationReport(root, &report), APP_SUCCESS);
     EXPECT_EQ(report.station_count, 5u);
@@ -400,18 +496,26 @@ TEST(StationValidationThreads, ReportsValidStationsAndSplitsWorkAcrossThreads) {
     EXPECT_EQ(report.worker1_checked + report.worker2_checked, 5u);
     EXPECT_EQ(report.worker1_checked, 3u);
     EXPECT_EQ(report.worker2_checked, 2u);
-    for (size_t i = 0; i < report.station_count; ++i) EXPECT_EQ(report.issue_flags[i], 0u);
+
+    for (size_t i = 0; i < report.station_count; ++i) {
+        EXPECT_EQ(report.issue_flags[i], 0u);
+    }
+
     testing::internal::CaptureStdout();
     displayStationValidationReport(&report);
     std::string output = testing::internal::GetCapturedStdout();
-    EXPECT_NE(output.find("All station records passed validation"), std::string::npos);
+    EXPECT_NE(output.find("All station records passed validation"),
+              std::string::npos);
+
     freeStationValidationReport(&report);
     freeStationTree(root);
 }
 
 TEST(StationValidationThreads, FlagsEveryInvalidFieldAndDisplaysIssues) {
     StationNode* root = nullptr;
-    ASSERT_EQ(insertStation(&root, makeStation(7, "InitiallyValid")), APP_SUCCESS);
+    ASSERT_EQ(insertStation(&root, makeStation(7, "InitiallyValid")),
+              APP_SUCCESS);
+
     StationNode* node = searchStation(root, 7);
     ASSERT_NE(node, nullptr);
     node->station.id = 0;
@@ -433,57 +537,66 @@ TEST(StationValidationThreads, FlagsEveryInvalidFieldAndDisplaysIssues) {
     testing::internal::CaptureStdout();
     displayStationValidationReport(&report);
     std::string output = testing::internal::GetCapturedStdout();
+
     EXPECT_NE(output.find("Station ID must be positive"), std::string::npos);
     EXPECT_NE(output.find("Station name is empty"), std::string::npos);
     EXPECT_NE(output.find("Distance is invalid or negative"), std::string::npos);
     EXPECT_NE(output.find("Fare is invalid or negative"), std::string::npos);
     EXPECT_NE(output.find("Platform number must be positive"), std::string::npos);
+
     freeStationValidationReport(&report);
     freeStationTree(root);
 }
 
 /*
- * This is an end-to-end test of the actual interactive application.
- * main.c must be compiled with -Dmain=metro_app_main so GoogleTest owns main().
- * It intentionally runs last because stdin is redirected for the application.
+ * End-to-end integration test.
+ * The coverage script must compile main.c with -Dmain=metro_app_main.
  */
 TEST(ZIntegrationTest, ExercisesLoginMenusStationCrudAndExitPaths) {
     writeDefaultStations();
     writeDefaultUsers();
     writeText("data/audit.log", "");
 
-    
     const std::string script =
-        "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\n" // overlong username
+        "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\n"
         "admin\nadmin123\n"
-        "abc\n"                       // invalid menu input
-        "99\n"                        // invalid menu option
-        "1\n"                         // display stations
-        "2\n101\n"                    // search existing station
-        "2\n999\n"                    // search missing station
-        "3\n"                         // summary
-        "4\n101\n106\n"               // valid source/destination
-        "4\n999\n106\n"               // missing source
-        "4\n101\n101\n"               // same source/destination
-        "4\n-1\n106\n"                // invalid ID
-        "5\n"                         // threaded station validation
-        "6\n108\n\n"                  // add: empty name
-        "6\n108\nTemp\nnot-a-number\n"// add: invalid float
-        "6\n107\nTestStop\n2.5\n12.5\n2\n" // add station
-        "7\n107\nUpdatedStop\n3.5\n13.5\n3\n" // update station
-        "8\n107\n"                    // delete station
-        "9\n"                         // logout
+        "abc\n"
+        "99\n"
+        "1\n"
+        "2\n101\n"
+        "2\n999\n"
+        "3\n"
+        "4\n101\n106\n"
+        "4\n999\n106\n"
+        "4\n101\n999\n"
+        "4\n101\n101\n"
+        "4\n-1\n106\n"
+        "5\n"
+        "6\n108\n\n"
+        "6\n108\nName,WithComma\n"
+        "6\n108\nTemp\nnot-a-number\n"
+        "6\n108\nTemp\n-1\n12\n2\n"
+        "6\n108\nTemp\n1\n-1\n2\n"
+        "6\n108\nTemp\n1\n12\n0\n"
+        "6\n0\nZeroId\n1\n1\n1\n"
+        "6\n107\nTestStop\n2.5\n12.5\n2\n"
+        "6\n107\nDuplicate\n2.5\n12.5\n2\n"
+        "7\n999\n"
+        "7\n107\nUpdatedStop\n3.5\n13.5\n3\n"
+        "8\n999\n"
+        "8\n107\n"
+        "9\n"
         "viewer\nviewer123\n"
-        "7\n"                         // viewer cannot update
-        "2\n999\n"                    // viewer search missing station
-        "9\n"                         // logout
-        "baduser\nbadpass\n"          // failed login
+        "6\n"
+        "2\n999\n"
+        "9\n"
+        "baduser\nbadpass\n"
         "admin\nadmin123\n"
-        "0\n";                        // exit application
-
+        "0\n";
 
     fs::path inputPath = testRoot / "app_input.txt";
     writeText(inputPath, script);
+
 #if defined(_WIN32)
     int savedStdin = _dup(_fileno(stdin));
 #else
@@ -506,14 +619,18 @@ TEST(ZIntegrationTest, ExercisesLoginMenusStationCrudAndExitPaths) {
 
     EXPECT_EQ(result, EXIT_SUCCESS);
     EXPECT_NE(output.find("Loaded 6 stations"), std::string::npos);
+    EXPECT_NE(output.find("STATION DATA VALIDATION REPORT"), std::string::npos);
+    EXPECT_NE(output.find("All station records passed validation"), std::string::npos);
     EXPECT_NE(output.find("Station added and saved successfully"), std::string::npos);
+    EXPECT_NE(output.find("A station with that ID already exists"), std::string::npos);
     EXPECT_NE(output.find("Station updated and saved successfully"), std::string::npos);
     EXPECT_NE(output.find("Station deleted and changes saved successfully"), std::string::npos);
     EXPECT_NE(output.find("Invalid option for Viewer"), std::string::npos);
     EXPECT_NE(output.find("Login failed"), std::string::npos);
     EXPECT_NE(output.find("Metro Management System closed"), std::string::npos);
-    EXPECT_EQ(countStations(nullptr), 0); // tree is owned/freed by the application
+    EXPECT_EQ(countStations(nullptr), 0);
 }
+
 } // namespace
 
 int main(int argc, char** argv) {
