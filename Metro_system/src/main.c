@@ -69,9 +69,8 @@ static int readInteger(const char *prompt, int *value)
     char input[INPUT_MAX];
     char *end;
     long number;
-    int result;
 
-    result = readLine(prompt, input, sizeof(input));
+    int result = readLine(prompt, input, sizeof(input));
 
     if (result <= 0) {
         return result;
@@ -96,9 +95,8 @@ static int readFloatValue(const char *prompt, float *value)
     char input[INPUT_MAX];
     char *end;
     float number;
-    int result;
 
-    result = readLine(prompt, input, sizeof(input));
+    int result = readLine(prompt, input, sizeof(input));
 
     if (result <= 0) {
         return result;
@@ -205,10 +203,9 @@ static void showStationSummary(const StationNode *root)
 static void viewStation(const StationNode *root)
 {
     int id;
-    int result;
     StationNode *node;
 
-    result = readInteger("Enter station ID to search: ", &id);
+    int result = readInteger("Enter station ID to search: ", &id);
 
     if (result <= 0) {
         return;
@@ -367,7 +364,6 @@ static void addStation(StationNode **root, const User *user)
 {
     Station station;
     AppStatus status;
-    int result;
 
     if (!hasPermission(user->role, "ADD")) {
         printf("Permission denied: Admin access is required.\n");
@@ -379,7 +375,7 @@ static void addStation(StationNode **root, const User *user)
 
     memset(&station, 0, sizeof(station));
 
-    result = readStationDetails(&station, 1);
+    int result = readStationDetails(&station, 1);
 
     if (result <= 0) {
         return;
@@ -415,7 +411,6 @@ static void addStation(StationNode **root, const User *user)
 static void updateStationDetails(StationNode **root, const User *user)
 {
     int id;
-    int result;
     StationNode *node;
     Station updated;
     AppStatus status;
@@ -429,7 +424,7 @@ static void updateStationDetails(StationNode **root, const User *user)
         return;
     }
 
-    result = readInteger("Enter station ID to update: ", &id);
+    int result = readInteger("Enter station ID to update: ", &id);
 
     if (result <= 0) {
         return;
@@ -484,7 +479,6 @@ static void updateStationDetails(StationNode **root, const User *user)
 static void deleteStationById(StationNode **root, const User *user)
 {
     int id;
-    int result;
     AppStatus status;
     char details[INPUT_MAX];
 
@@ -496,7 +490,7 @@ static void deleteStationById(StationNode **root, const User *user)
         return;
     }
 
-    result = readInteger("Enter station ID to delete: ", &id);
+    int result = readInteger("Enter station ID to delete: ", &id);
 
     if (result <= 0) {
         return;
