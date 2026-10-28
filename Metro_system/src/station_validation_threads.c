@@ -73,12 +73,11 @@ static void *validateStationRange(void *argument)
     ValidationWorkerData *data =
         (ValidationWorkerData *)argument;
 
-    size_t i;
 
     data->checked_count = 0;
     data->invalid_count = 0;
 
-    for (i = data->start; i < data->end; i++) {
+    for (size_t i = data->start; i < data->end; i++) {
         unsigned int issues =
             validateStation(&data->stations[i]);
 
@@ -202,7 +201,6 @@ void displayStationValidationReport(
     const StationValidationReport *report
 )
 {
-    size_t i;
 
     if (report == NULL) {
         printf("Error: validation report is unavailable.\n");
@@ -237,7 +235,7 @@ void displayStationValidationReport(
     } else {
         printf("\nStation records requiring attention:\n");
 
-        for (i = 0; i < report->station_count; i++) {
+        for (size_t i = 0; i < report->station_count; i++) {
             unsigned int flags = report->issue_flags[i];
 
             if (flags == 0) {
