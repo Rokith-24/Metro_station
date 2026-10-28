@@ -116,6 +116,9 @@ int hasPermission(UserRole role, const char *action)
         strcmp(action, "DELETE") == 0) {
         return role == ROLE_ADMIN;
     }
+    if (strcmp(action, "VALIDATE") == 0) {
+        return role == ROLE_ADMIN;
+    }
 
     return 0;
 }
