@@ -655,12 +655,11 @@ int main(void)
     while (running) {
         char username[USERNAME_MAX];
         char password[PASSWORD_MAX];
-        int result;
         User user = {0};
 
         printf("\n--------------- LOGIN ---------------\n");
 
-        result = readLine("Username: ", username, sizeof(username));
+        int result = readLine("Username: ", username, sizeof(username));
 
         if (result == 0) {
             break;
