@@ -11,6 +11,7 @@
 #include "storage.h"
 #include "auth.h"
 #include "audit_log.h"
+#include "station_validation_threads.h"
 
 #define INPUT_MAX 128
 
@@ -325,6 +326,43 @@ static void validateSourceDestination(const StationNode *root,
              APP_SUCCESS);
 }
 
+static void validateStationDataMultithreaded(
+    const StationNode *root,
+    const User *user)
+{
+    StationValidationReport report = {0};
+    AppStatus status;
+
+    if (!hasPermission(user->role, "VALIDATE")) {
+        printf("Permission denied: Admin access is required.\n");
+
+        logEvent(user->username, "STATION_VALIDATION",
+                 "Permission denied", APP_PERMISSION_DENIED);
+        return;
+    }
+
+    printf("\nStarting multithreaded station validation...\n");
+
+    status = generateStationValidationReport(root, &report);
+
+    if (status != APP_SUCCESS) {
+        printf("Station validation failed.\n");
+
+        logEvent(user->username, "STATION_VALIDATION",
+                 "Validation report generation failed", status);
+        freeStationValidationReport(&report);
+        return;
+    }
+
+    displayStationValidationReport(&report);
+
+    logEvent(user->username, "STATION_VALIDATION",
+             "Multithreaded station validation completed",
+             APP_SUCCESS);
+
+    freeStationValidationReport(&report);
+}
+
 static void addStation(StationNode **root, const User *user)
 {
     Station station;
@@ -500,12 +538,13 @@ static void showMenu(UserRole role)
     printf("4. Source/Destination Validation\n");
 
     if (role == ROLE_ADMIN) {
-        printf("5. Add station\n");
-        printf("6. Update station\n");
-        printf("7. Delete station\n");
+        printf("5. Multithreaded Station Data Validation\n");
+        printf("6. Add station\n");
+        printf("7. Update station\n");
+        printf("8. Delete station\n");
     }
 
-    printf("8. Logout\n");
+    printf("9. Logout\n");
     printf("0. Exit application\n");
     printf("=============================================\n");
 }
@@ -545,9 +584,9 @@ static int runUserSession(StationNode **root, const User *user)
                 validateSourceDestination(*root, user);
                 break;
 
-            case 5:
+             case 5:
                 if (user->role == ROLE_ADMIN) {
-                    addStation(root, user);
+                    validateStationDataMultithreaded(*root, user);
                 } else {
                     printf("Invalid option for Viewer.\n");
                 }
@@ -555,7 +594,7 @@ static int runUserSession(StationNode **root, const User *user)
 
             case 6:
                 if (user->role == ROLE_ADMIN) {
-                    updateStationDetails(root, user);
+                    addStation(root, user);
                 } else {
                     printf("Invalid option for Viewer.\n");
                 }
@@ -563,13 +602,21 @@ static int runUserSession(StationNode **root, const User *user)
 
             case 7:
                 if (user->role == ROLE_ADMIN) {
-                    deleteStationById(root, user);
+                    updateStationDetails(root, user);
                 } else {
                     printf("Invalid option for Viewer.\n");
                 }
                 break;
 
             case 8:
+                if (user->role == ROLE_ADMIN) {
+                    deleteStationById(root, user);
+                } else {
+                    printf("Invalid option for Viewer.\n");
+                }
+                break;
+
+            case 9:
                 logEvent(user->username, "LOGOUT",
                          "User logged out", APP_SUCCESS);
 
