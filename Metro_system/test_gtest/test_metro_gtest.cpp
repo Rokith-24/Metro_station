@@ -1002,6 +1002,195 @@ TEST(ZIntegrationTest, ReportsAuditLogFailureWithoutCrashingApplication) {
     writeText("data/audit.log", "");
 }
 
+
+/*
+ * Additional branch-focused tests based on the current source files.
+ * The /dev/full and directory-read cases are Linux/POSIX-specific.
+ */
+
+TEST(StorageApi, LoadingDirectoryReportsReadErrorOnPosix) {
+#if !defined(_WIN32)
+    StationNode* root = nullptr;
+
+    // fopen() can open a directory on Linux, but fgets() fails with EISDIR.
+    EXPECT_EQ(loadStationsFromCSV(&root, "data"), APP_ERROR);
+    EXPECT_EQ(root, nullptr);
+    freeStationTree(root);
+#else
+    GTEST_SKIP() << "Directory read-error behaviour is POSIX-specific.";
+#endif
+}
+
+TEST(StorageApi, ReportsFlushFailureWhenWritingToFullDeviceOnPosix) {
+#if !defined(_WIN32)
+    StationNode* root = nullptr;
+    const fs::path fullPath = "data/full_device.csv";
+    std::error_code ec;
+
+    fs::remove(fullPath, ec);
+    fs::create_symlink("/dev/full", fullPath, ec);
+    ASSERT_FALSE(ec) << "Could not create /dev/full symlink: " << ec.message();
+
+    // The buffered header write may succeed, but flushing/closing /dev/full
+    // fails. saveStationsToCSV must propagate that failure.
+    EXPECT_EQ(saveStationsToCSV(root, fullPath.string().c_str()), APP_ERROR);
+
+    fs::remove(fullPath, ec);
+    freeStationTree(root);
+#else
+    GTEST_SKIP() << "/dev/full is Linux/POSIX-specific.";
+#endif
+}
+
+TEST(AuthApi, SkipsRowsWithMissingOrExtraColumnsBeforeValidUser) {
+    writeText("data/users.csv",
+        "username,password,role\n"
+        "missing,password\n"
+        "extra,password,VIEWER,unexpected\n"
+        ",emptyusername,VIEWER\n"
+        "viewer,viewer123,VIEWER\n");
+
+    User user{};
+    EXPECT_EQ(authenticateUser("viewer", "viewer123", &user), APP_SUCCESS);
+    EXPECT_EQ(user.role, ROLE_VIEWER);
+    EXPECT_STREQ(user.username, "viewer");
+    EXPECT_EQ(authenticateUser("missing", "password", &user),
+              APP_PERMISSION_DENIED);
+
+    writeDefaultUsers();
+}
+
+TEST(AuditLogApi, DetectsFlushFailureWhenAuditPathTargetsFullDeviceOnPosix) {
+#if !defined(_WIN32)
+    const fs::path auditPath = "data/audit.log";
+    std::error_code ec;
+
+    fs::remove_all(auditPath, ec);
+    fs::create_symlink("/dev/full", auditPath, ec);
+    ASSERT_FALSE(ec) << "Could not create /dev/full symlink: " << ec.message();
+
+    EXPECT_EQ(writeAuditLog("admin", "LOGIN", "full device test", APP_SUCCESS),
+              APP_ERROR);
+
+    fs::remove(auditPath, ec);
+    writeText(auditPath, "");
+#else
+    GTEST_SKIP() << "/dev/full is Linux/POSIX-specific.";
+#endif
+}
+
+TEST(ZIntegrationTest, ViewerIsRejectedFromEveryAdminOnlyMenuOption) {
+    const std::string script =
+        "viewer\nviewer123\n"
+        "5\n"  // threaded station validation
+        "6\n"  // add
+        "7\n"  // update
+        "8\n"  // delete
+        "9\n"  // logout
+        "admin\nadmin123\n"
+        "0\n";
+
+    const AppRunResult run = runAppWithInput(
+        script, "viewer_admin_options_input.txt");
+
+    EXPECT_EQ(run.exitCode, EXIT_SUCCESS);
+    const std::string expected = "Invalid option for Viewer.";
+    size_t count = 0;
+    size_t position = 0;
+    while ((position = run.output.find(expected, position)) != std::string::npos) {
+        ++count;
+        position += expected.size();
+    }
+    EXPECT_EQ(count, 4u);
+    EXPECT_NE(run.output.find("Metro Management System closed"),
+              std::string::npos);
+}
+
+TEST(ZIntegrationTest, ReportsBothSourceAndDestinationMissing) {
+    const AppRunResult run = runAppWithInput(
+        "admin\nadmin123\n"
+        "4\n999\n998\n"
+        "0\n",
+        "both_route_stations_missing.txt");
+
+    EXPECT_EQ(run.exitCode, EXIT_SUCCESS);
+    EXPECT_NE(run.output.find("Source station ID 999 was not found."),
+              std::string::npos);
+    EXPECT_NE(run.output.find("Destination station ID 998 was not found."),
+              std::string::npos);
+    EXPECT_NE(run.output.find("Validation result: FAILED."),
+              std::string::npos);
+}
+
+TEST(ZIntegrationTest, RejectsBlankAndCommaContainingStationNames) {
+    const AppRunResult run = runAppWithInput(
+        "admin\nadmin123\n"
+        "6\n108\n\n"                 // blank name
+        "6\n108\nName,WithComma\n"   // comma in name
+        "6\n108\nValidName\n1\n10\n1\n"
+        "0\n",
+        "station_name_rejections.txt");
+
+    EXPECT_EQ(run.exitCode, EXIT_SUCCESS);
+    EXPECT_NE(run.output.find("Name cannot be empty or contain a comma."),
+              std::string::npos);
+    EXPECT_NE(run.output.find("Station added and saved successfully."),
+              std::string::npos);
+    EXPECT_NE(run.output.find("Metro Management System closed"),
+              std::string::npos);
+}
+
+
+TEST_F(AvlTest, DeletionExercisesAllRebalanceCasesIncludingZeroBalanceChildren) {
+    struct Scenario {
+        int ids[5];
+        size_t count;
+        int deleteId;
+        int expectedRoot;
+    };
+
+    // These cases trigger LL, LR, RR, RL, and both heavy-child balance-zero
+    // deletion paths. Each scenario starts with a fresh tree.
+    const Scenario scenarios[] = {
+        {{4, 2, 5, 1, 0}, 4, 5, 2}, // LL
+        {{4, 2, 5, 3, 0}, 4, 5, 3}, // LR
+        {{2, 1, 4, 5, 0}, 4, 1, 4}, // RR
+        {{2, 1, 4, 3, 0}, 4, 1, 3}, // RL
+        {{4, 2, 5, 1, 3}, 5, 5, 2}, // left child balance = 0
+        {{2, 1, 4, 3, 5}, 5, 1, 4}  // right child balance = 0
+    };
+
+    for (const Scenario& scenario : scenarios) {
+        StationNode* local = nullptr;
+        for (size_t i = 0; i < scenario.count; ++i) {
+            ASSERT_EQ(insertStation(&local,
+                                    makeStation(scenario.ids[i], "Node")),
+                      APP_SUCCESS);
+        }
+
+        ASSERT_NE(local, nullptr);
+        ASSERT_EQ(deleteStation(&local, scenario.deleteId), APP_SUCCESS);
+        ASSERT_NE(local, nullptr);
+        EXPECT_EQ(local->station.id, scenario.expectedRoot);
+        EXPECT_TRUE(avlInvariantsHold(local));
+        freeStationTree(local);
+    }
+}
+
+TEST_F(AvlTest, MissingDeleteKeysOnBothSidesPreserveTree) {
+    for (int id : {40, 20, 60, 10, 30, 50, 70}) {
+        ASSERT_EQ(insertStation(&root, makeStation(id, "Node")), APP_SUCCESS);
+    }
+
+    EXPECT_EQ(deleteStation(&root, 5), APP_NOT_FOUND);   // missing left-side key
+    EXPECT_EQ(deleteStation(&root, 80), APP_NOT_FOUND);  // missing right-side key
+    EXPECT_EQ(countStations(root), 7);
+    EXPECT_TRUE(avlInvariantsHold(root));
+    for (int id : {10, 20, 30, 40, 50, 60, 70}) {
+        EXPECT_NE(searchStation(root, id), nullptr);
+    }
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
