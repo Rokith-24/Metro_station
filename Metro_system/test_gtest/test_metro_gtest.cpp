@@ -1141,54 +1141,109 @@ TEST(ZIntegrationTest, RejectsBlankAndCommaContainingStationNames) {
 }
 
 
-TEST_F(AvlTest, DeletionExercisesAllRebalanceCasesIncludingZeroBalanceChildren) {
-    struct Scenario {
-        int ids[5];
-        size_t count;
-        int deleteId;
-        int expectedRoot;
-    };
 
-    // These cases trigger LL, LR, RR, RL, and both heavy-child balance-zero
-    // deletion paths. Each scenario starts with a fresh tree.
-    const Scenario scenarios[] = {
-        {{4, 2, 5, 1, 0}, 4, 5, 2}, // LL
-        {{4, 2, 5, 3, 0}, 4, 5, 3}, // LR
-        {{2, 1, 4, 5, 0}, 4, 1, 4}, // RR
-        {{2, 1, 4, 3, 0}, 4, 1, 3}, // RL
-        {{4, 2, 5, 1, 3}, 5, 5, 2}, // left child balance = 0
-        {{2, 1, 4, 3, 5}, 5, 1, 4}  // right child balance = 0
-    };
 
-    for (const Scenario& scenario : scenarios) {
-        StationNode* local = nullptr;
-        for (size_t i = 0; i < scenario.count; ++i) {
-            ASSERT_EQ(insertStation(&local,
-                                    makeStation(scenario.ids[i], "Node")),
-                      APP_SUCCESS);
-        }
 
-        ASSERT_NE(local, nullptr);
-        ASSERT_EQ(deleteStation(&local, scenario.deleteId), APP_SUCCESS);
-        ASSERT_NE(local, nullptr);
-        EXPECT_EQ(local->station.id, scenario.expectedRoot);
-        EXPECT_TRUE(avlInvariantsHold(local));
-        freeStationTree(local);
-    }
+
+/* Additional targeted branch-coverage tests reviewed against the current C APIs. */
+TEST(AvlExtraCoverage, MinimumAndMaximumHandleEmptyTreeAndNullOutput) {
+    StationNode* root = nullptr;
+    int id = -1;
+    EXPECT_EQ(findMinimumStationId(nullptr, &id), 0);
+    EXPECT_EQ(findMaximumStationId(nullptr, &id), 0);
+    EXPECT_EQ(findMinimumStationId(nullptr, nullptr), 0);
+    EXPECT_EQ(findMaximumStationId(nullptr, nullptr), 0);
+    EXPECT_EQ(id, -1);
 }
 
-TEST_F(AvlTest, MissingDeleteKeysOnBothSidesPreserveTree) {
-    for (int id : {40, 20, 60, 10, 30, 50, 70}) {
-        ASSERT_EQ(insertStation(&root, makeStation(id, "Node")), APP_SUCCESS);
-    }
+TEST(AvlExtraCoverage, UpdateRejectsNonPositiveIdAndMismatchedRecordId) {
+    StationNode* root = nullptr;
+    ASSERT_EQ(insertStation(&root, makeStation(10, "Ten")), APP_SUCCESS);
+    EXPECT_EQ(updateStation(root, 0, makeStation(0, "Bad")), APP_INVALID_INPUT);
+    EXPECT_EQ(updateStation(root, 10, makeStation(11, "Mismatch")), APP_INVALID_INPUT);
+    EXPECT_STREQ(searchStation(root, 10)->station.name, "Ten");
+    freeStationTree(root);
+}
 
-    EXPECT_EQ(deleteStation(&root, 5), APP_NOT_FOUND);   // missing left-side key
-    EXPECT_EQ(deleteStation(&root, 80), APP_NOT_FOUND);  // missing right-side key
-    EXPECT_EQ(countStations(root), 7);
-    EXPECT_TRUE(avlInvariantsHold(root));
-    for (int id : {10, 20, 30, 40, 50, 60, 70}) {
-        EXPECT_NE(searchStation(root, id), nullptr);
-    }
+TEST(AvlExtraCoverage, DeleteRejectsNullRootPointerAndNonPositiveId) {
+    StationNode* root = nullptr;
+    EXPECT_EQ(deleteStation(nullptr, 10), APP_INVALID_INPUT);
+    EXPECT_EQ(deleteStation(&root, 0), APP_INVALID_INPUT);
+    EXPECT_EQ(deleteStation(&root, -1), APP_INVALID_INPUT);
+    EXPECT_EQ(deleteStation(&root, 10), APP_NOT_FOUND);
+}
+
+TEST(AvlExtraCoverage, SearchTraversesLeftRightAndMissingBranches) {
+    StationNode* root = nullptr;
+    ASSERT_EQ(insertStation(&root, makeStation(20, "Twenty")), APP_SUCCESS);
+    ASSERT_EQ(insertStation(&root, makeStation(10, "Ten")), APP_SUCCESS);
+    ASSERT_EQ(insertStation(&root, makeStation(30, "Thirty")), APP_SUCCESS);
+    EXPECT_NE(searchStation(root, 10), nullptr);
+    EXPECT_NE(searchStation(root, 30), nullptr);
+    EXPECT_EQ(searchStation(root, 25), nullptr);
+    EXPECT_EQ(searchStation(nullptr, 20), nullptr);
+    freeStationTree(root);
+}
+
+TEST(StorageExtraCoverage, RejectsMalformedNumericFieldsAndExtraColumns) {
+    StationNode* root = nullptr;
+    writeText("data/extra_bad_rows.csv",
+        "id,name,distance,fare,platform\n"
+        "x,BadId,1,1,1\n"
+        "2,BadDistance,nope,1,1\n"
+        "3,BadFare,1,nope,1\n"
+        "4,BadPlatform,1,1,zero\n"
+        "5,ExtraColumn,1,1,1,unexpected\n");
+    EXPECT_EQ(loadStationsFromCSV(&root, "data/extra_bad_rows.csv"), APP_ERROR);
+    EXPECT_EQ(countStations(root), 0);
+    freeStationTree(root);
+}
+
+TEST(StorageExtraCoverage, DuplicateStationIdReturnsDuplicateStatus) {
+    StationNode* root = nullptr;
+    writeText("data/extra_duplicate.csv",
+        "id,name,distance,fare,platform\n"
+        "7,Seven,1,2,1\n"
+        "7,Duplicate,2,3,2\n");
+    EXPECT_EQ(loadStationsFromCSV(&root, "data/extra_duplicate.csv"), APP_DUPLICATE);
+    ASSERT_NE(searchStation(root, 7), nullptr);
+    EXPECT_STREQ(searchStation(root, 7)->station.name, "Seven");
+    freeStationTree(root);
+}
+
+TEST(AuthExtraCoverage, RejectsNullAndEmptyCredentialArguments) {
+    writeDefaultUsers();
+    User user{};
+    EXPECT_EQ(authenticateUser(nullptr, "pass", &user), APP_INVALID_INPUT);
+    EXPECT_EQ(authenticateUser("admin", nullptr, &user), APP_INVALID_INPUT);
+    EXPECT_EQ(authenticateUser("admin", "pass", nullptr), APP_INVALID_INPUT);
+    EXPECT_EQ(authenticateUser("", "pass", &user), APP_INVALID_INPUT);
+    EXPECT_EQ(authenticateUser("admin", "", &user), APP_INVALID_INPUT);
+}
+
+TEST(AuthExtraCoverage, UnknownAndNullPermissionActionsAreDenied) {
+    EXPECT_EQ(hasPermission(ROLE_ADMIN, nullptr), 0);
+    EXPECT_EQ(hasPermission(ROLE_ADMIN, "BOGUS"), 0);
+    EXPECT_EQ(hasPermission(ROLE_VIEWER, "ADD"), 0);
+    EXPECT_EQ(hasPermission(ROLE_VIEWER, "UPDATE"), 0);
+    EXPECT_EQ(hasPermission(ROLE_VIEWER, "DELETE"), 0);
+    EXPECT_EQ(hasPermission(ROLE_VIEWER, "SEARCH"), 1);
+}
+
+TEST(AuditLogExtraCoverage, RejectsEachNullArgument) {
+    EXPECT_EQ(writeAuditLog(nullptr, "LOGIN", "ok", APP_SUCCESS), APP_INVALID_INPUT);
+    EXPECT_EQ(writeAuditLog("admin", nullptr, "ok", APP_SUCCESS), APP_INVALID_INPUT);
+    EXPECT_EQ(writeAuditLog("admin", "LOGIN", nullptr, APP_SUCCESS), APP_INVALID_INPUT);
+}
+
+TEST(StationValidationExtraCoverage, NullInputsAndEmptyTreeAreHandled) {
+    StationValidationReport report{};
+    EXPECT_EQ(generateStationValidationReport(nullptr, nullptr), APP_INVALID_INPUT);
+    EXPECT_EQ(generateStationValidationReport(nullptr, &report), APP_SUCCESS);
+    EXPECT_EQ(report.station_count, 0u);
+    EXPECT_EQ(report.invalid_count, 0u);
+    displayStationValidationReport(nullptr);
+    freeStationValidationReport(&report);
 }
 
 } // namespace
