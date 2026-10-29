@@ -1246,6 +1246,215 @@ TEST(StationValidationExtraCoverage, NullInputsAndEmptyTreeAreHandled) {
     freeStationValidationReport(&report);
 }
 
+/* Twenty additional tests targeting concrete edge cases and decision paths. */
+TEST(AvlDeepCoverage, DuplicateInsertPreservesOriginalRecord) {
+    StationNode* root = nullptr;
+    ASSERT_EQ(insertStation(&root, makeStation(20, "Original")), APP_SUCCESS);
+    EXPECT_EQ(insertStation(&root, makeStation(20, "Replacement")), APP_DUPLICATE);
+    ASSERT_NE(searchStation(root, 20), nullptr);
+    EXPECT_STREQ(searchStation(root, 20)->station.name, "Original");
+    EXPECT_EQ(countStations(root), 1);
+    freeStationTree(root);
+}
+
+TEST(AvlDeepCoverage, InsertRejectsNullRootPointerAndNonPositiveIds) {
+    EXPECT_EQ(insertStation(nullptr, makeStation(1, "One")), APP_INVALID_INPUT);
+    StationNode* root = nullptr;
+    EXPECT_EQ(insertStation(&root, makeStation(0, "Zero")), APP_INVALID_INPUT);
+    EXPECT_EQ(insertStation(&root, makeStation(-1, "Negative")), APP_INVALID_INPUT);
+    EXPECT_EQ(root, nullptr);
+}
+
+TEST(AvlDeepCoverage, DeleteLeafNodeKeepsRemainingTreeValid) {
+    StationNode* root = nullptr;
+    ASSERT_EQ(insertStation(&root, makeStation(20, "Twenty")), APP_SUCCESS);
+    ASSERT_EQ(insertStation(&root, makeStation(10, "Ten")), APP_SUCCESS);
+    ASSERT_EQ(insertStation(&root, makeStation(30, "Thirty")), APP_SUCCESS);
+    EXPECT_EQ(deleteStation(&root, 10), APP_SUCCESS);
+    EXPECT_EQ(searchStation(root, 10), nullptr);
+    EXPECT_TRUE(avlInvariantsHold(root));
+    freeStationTree(root);
+}
+
+TEST(AvlDeepCoverage, DeleteNodeWithOneChildKeepsChildReachable) {
+    StationNode* root = nullptr;
+    ASSERT_EQ(insertStation(&root, makeStation(20, "Twenty")), APP_SUCCESS);
+    ASSERT_EQ(insertStation(&root, makeStation(10, "Ten")), APP_SUCCESS);
+    ASSERT_EQ(insertStation(&root, makeStation(5, "Five")), APP_SUCCESS);
+    EXPECT_EQ(deleteStation(&root, 10), APP_SUCCESS);
+    EXPECT_NE(searchStation(root, 5), nullptr);
+    EXPECT_TRUE(avlInvariantsHold(root));
+    freeStationTree(root);
+}
+
+TEST(AvlDeepCoverage, DeleteRootWithTwoChildrenPreservesBothSubtrees) {
+    StationNode* root = nullptr;
+    ASSERT_EQ(insertStation(&root, makeStation(20, "Twenty")), APP_SUCCESS);
+    ASSERT_EQ(insertStation(&root, makeStation(10, "Ten")), APP_SUCCESS);
+    ASSERT_EQ(insertStation(&root, makeStation(30, "Thirty")), APP_SUCCESS);
+    EXPECT_EQ(deleteStation(&root, 20), APP_SUCCESS);
+    EXPECT_EQ(searchStation(root, 20), nullptr);
+    EXPECT_NE(searchStation(root, 10), nullptr);
+    EXPECT_NE(searchStation(root, 30), nullptr);
+    EXPECT_TRUE(avlInvariantsHold(root));
+    freeStationTree(root);
+}
+
+TEST(AvlDeepCoverage, DeleteLastNodeProducesEmptyTree) {
+    StationNode* root = nullptr;
+    ASSERT_EQ(insertStation(&root, makeStation(9, "Nine")), APP_SUCCESS);
+    EXPECT_EQ(deleteStation(&root, 9), APP_SUCCESS);
+    EXPECT_EQ(root, nullptr);
+    EXPECT_EQ(countStations(root), 0);
+}
+
+TEST(AvlDeepCoverage, UpdateMissingStationReturnsNotFound) {
+    StationNode* root = nullptr;
+    ASSERT_EQ(insertStation(&root, makeStation(9, "Nine")), APP_SUCCESS);
+    EXPECT_EQ(updateStation(root, 99, makeStation(99, "Missing")), APP_NOT_FOUND);
+    EXPECT_STREQ(searchStation(root, 9)->station.name, "Nine");
+    freeStationTree(root);
+}
+
+TEST(AvlDeepCoverage, UpdateExistingStationChangesStoredFields) {
+    StationNode* root = nullptr;
+    ASSERT_EQ(insertStation(&root, makeStation(9, "Old", 1.0f, 2.0f, 1)), APP_SUCCESS);
+    EXPECT_EQ(updateStation(root, 9, makeStation(9, "New", 8.0f, 9.0f, 4)), APP_SUCCESS);
+    ASSERT_NE(searchStation(root, 9), nullptr);
+    EXPECT_STREQ(searchStation(root, 9)->station.name, "New");
+    EXPECT_FLOAT_EQ(searchStation(root, 9)->station.distance, 8.0f);
+    EXPECT_FLOAT_EQ(searchStation(root, 9)->station.fare, 9.0f);
+    EXPECT_EQ(searchStation(root, 9)->station.platform, 4);
+    freeStationTree(root);
+}
+
+TEST(AvlDeepCoverage, MinimumAndMaximumReturnSortedBounds) {
+    StationNode* root = nullptr;
+    int minId = 0, maxId = 0;
+    ASSERT_EQ(insertStation(&root, makeStation(20, "Twenty")), APP_SUCCESS);
+    ASSERT_EQ(insertStation(&root, makeStation(5, "Five")), APP_SUCCESS);
+    ASSERT_EQ(insertStation(&root, makeStation(40, "Forty")), APP_SUCCESS);
+    EXPECT_EQ(findMinimumStationId(root, &minId), 1);
+    EXPECT_EQ(findMaximumStationId(root, &maxId), 1);
+    EXPECT_EQ(minId, 5);
+    EXPECT_EQ(maxId, 40);
+    freeStationTree(root);
+}
+
+TEST(StorageDeepCoverage, AcceptsHeaderOnlyFileAndLeavesTreeEmpty) {
+    StationNode* root = nullptr;
+    writeText("data/header_only.csv", "id,name,distance,fare,platform\n");
+    EXPECT_EQ(loadStationsFromCSV(&root, "data/header_only.csv"), APP_SUCCESS);
+    EXPECT_EQ(countStations(root), 0);
+    freeStationTree(root);
+}
+
+TEST(StorageDeepCoverage, AcceptsCarriageReturnLineEndings) {
+    StationNode* root = nullptr;
+    writeText("data/crlf_rows.csv", "id,name,distance,fare,platform\r\n11,Eleven,1.5,4.5,2\r\n");
+    EXPECT_EQ(loadStationsFromCSV(&root, "data/crlf_rows.csv"), APP_SUCCESS);
+    ASSERT_NE(searchStation(root, 11), nullptr);
+    EXPECT_STREQ(searchStation(root, 11)->station.name, "Eleven");
+    freeStationTree(root);
+}
+
+TEST(StorageDeepCoverage, RejectsNegativeAndNonFiniteNumericValues) {
+    StationNode* root = nullptr;
+    writeText("data/numeric_edges.csv",
+        "id,name,distance,fare,platform\n"
+        "1,NegativeDistance,-1,2,1\n"
+        "2,NegativeFare,1,-2,1\n"
+        "3,InfiniteDistance,inf,2,1\n"
+        "4,NaNFare,1,nan,1\n"
+        "5,ZeroPlatform,1,2,0\n");
+    EXPECT_EQ(loadStationsFromCSV(&root, "data/numeric_edges.csv"), APP_ERROR);
+    EXPECT_EQ(countStations(root), 0);
+    freeStationTree(root);
+}
+
+TEST(StorageDeepCoverage, SaveNullFilenameReturnsInvalidInput) {
+    StationNode* root = nullptr;
+    EXPECT_EQ(saveStationsToCSV(root, nullptr), APP_INVALID_INPUT);
+}
+
+TEST(StorageDeepCoverage, SavesTreeInAscendingStationIdOrder) {
+    StationNode* root = nullptr;
+    ASSERT_EQ(insertStation(&root, makeStation(30, "Thirty")), APP_SUCCESS);
+    ASSERT_EQ(insertStation(&root, makeStation(10, "Ten")), APP_SUCCESS);
+    ASSERT_EQ(insertStation(&root, makeStation(20, "Twenty")), APP_SUCCESS);
+    ASSERT_EQ(saveStationsToCSV(root, "data/sorted_save.csv"), APP_SUCCESS);
+    const std::string saved = readText("data/sorted_save.csv");
+    const auto ten = saved.find("10,Ten,");
+    const auto twenty = saved.find("20,Twenty,");
+    const auto thirty = saved.find("30,Thirty,");
+    EXPECT_NE(ten, std::string::npos);
+    EXPECT_LT(ten, twenty);
+    EXPECT_LT(twenty, thirty);
+    freeStationTree(root);
+}
+
+TEST(AuthDeepCoverage, UnknownUsernameAndWrongPasswordAreDenied) {
+    writeDefaultUsers();
+    User user{};
+    EXPECT_EQ(authenticateUser("ghost", "whatever", &user), APP_PERMISSION_DENIED);
+    EXPECT_EQ(authenticateUser("admin", "wrong", &user), APP_PERMISSION_DENIED);
+}
+
+TEST(AuthDeepCoverage, EmptyUserFileReturnsError) {
+    writeText("data/users.csv", "");
+    User user{};
+    EXPECT_EQ(authenticateUser("admin", "admin123", &user), APP_ERROR);
+}
+
+TEST(AuthDeepCoverage, UnknownRoleForMatchingCredentialsReturnsError) {
+    writeText("data/users.csv", "username,password,role\nodd,secret,OPERATOR\n");
+    User user{};
+    EXPECT_EQ(authenticateUser("odd", "secret", &user), APP_ERROR);
+}
+
+TEST(AuditLogDeepCoverage, AppendsDistinctAuditEvents) {
+    writeText("data/audit.log", "");
+    EXPECT_EQ(writeAuditLog("admin", "LOGIN", "success", APP_SUCCESS), APP_SUCCESS);
+    EXPECT_EQ(writeAuditLog("viewer", "SEARCH", "station=101", APP_SUCCESS), APP_SUCCESS);
+    const std::string log = readText("data/audit.log");
+    EXPECT_NE(log.find("user=admin action=LOGIN details=success result=0"), std::string::npos);
+    EXPECT_NE(log.find("user=viewer action=SEARCH details=station=101 result=0"), std::string::npos);
+    EXPECT_LT(log.find("user=admin"), log.find("user=viewer"));
+}
+
+TEST(StationValidationDeepCoverage, ValidRecordsHaveZeroIssueFlags) {
+    StationNode* root = nullptr;
+    ASSERT_EQ(insertStation(&root, makeStation(1, "One", 0.0f, 0.0f, 1)), APP_SUCCESS);
+    ASSERT_EQ(insertStation(&root, makeStation(2, "Two", 3.5f, 7.0f, 2)), APP_SUCCESS);
+    StationValidationReport report{};
+    ASSERT_EQ(generateStationValidationReport(root, &report), APP_SUCCESS);
+    ASSERT_EQ(report.station_count, 2u);
+    EXPECT_EQ(report.invalid_count, 0u);
+    EXPECT_EQ(report.issue_flags[0], 0u);
+    EXPECT_EQ(report.issue_flags[1], 0u);
+    EXPECT_EQ(report.worker1_checked + report.worker2_checked, 2u);
+    freeStationValidationReport(&report);
+    freeStationTree(root);
+}
+
+TEST(StationValidationDeepCoverage, MultipleInvalidFieldsAreCombinedAsFlags) {
+    StationNode* root = nullptr;
+    Station invalid = makeStation(1, "", -1.0f, -2.0f, 0);
+    root = createNode(invalid);  // Bypass CRUD validation to exercise report validation itself.
+    ASSERT_NE(root, nullptr);
+    StationValidationReport report{};
+    ASSERT_EQ(generateStationValidationReport(root, &report), APP_SUCCESS);
+    ASSERT_EQ(report.station_count, 1u);
+    EXPECT_EQ(report.invalid_count, 1u);
+    EXPECT_NE(report.issue_flags[0] & ISSUE_EMPTY_NAME, 0u);
+    EXPECT_NE(report.issue_flags[0] & ISSUE_INVALID_DISTANCE, 0u);
+    EXPECT_NE(report.issue_flags[0] & ISSUE_INVALID_FARE, 0u);
+    EXPECT_NE(report.issue_flags[0] & ISSUE_INVALID_PLATFORM, 0u);
+    freeStationValidationReport(&report);
+    freeStationTree(root);
+}
+
+
 } // namespace
 
 int main(int argc, char** argv) {
