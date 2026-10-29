@@ -29,9 +29,7 @@ static int parseStation(char *line, Station *station)
 
     errno = 0;
     id = strtol(token, &end, 10);
-
-    if (errno != 0 || *end != '\0' ||
-        id <= 0 || id > 2147483647L) {
+    if (errno != 0 || *end != '\0' || id <= 0 || id > 2147483647L) {
         return 0;
     }
 
@@ -51,9 +49,7 @@ static int parseStation(char *line, Station *station)
 
     errno = 0;
     distance = strtof(token, &end);
-
-    if (errno != 0 || *end != '\0' ||
-        !isfinite(distance) || distance < 0.0f) {
+    if (errno != 0 || *end != '\0' || !isfinite(distance) || distance < 0.0f) {
         return 0;
     }
 
@@ -64,9 +60,7 @@ static int parseStation(char *line, Station *station)
 
     errno = 0;
     fare = strtof(token, &end);
-
-    if (errno != 0 || *end != '\0' ||
-        !isfinite(fare) || fare < 0.0f) {
+    if (errno != 0 || *end != '\0' || !isfinite(fare) || fare < 0.0f) {
         return 0;
     }
 
@@ -77,9 +71,8 @@ static int parseStation(char *line, Station *station)
 
     errno = 0;
     platform = strtol(token, &end, 10);
-
-    if (errno != 0 || *end != '\0' ||
-        platform <= 0 || platform > 2147483647L) {
+    if (errno != 0 || *end != '\0' || platform <= 0 ||
+        platform > 2147483647L) {
         return 0;
     }
 
@@ -149,61 +142,49 @@ AppStatus loadStationsFromCSV(StationNode **root, const char *filename)
     while (fgets(line, sizeof(line), file) != NULL) {
         Station station;
         size_t length = strlen(line);
-        int hasNewline =
-            (length > 0 && line[length - 1] == '\n');
-
-        lineNumber++;
+        int hasNewline = (length > 0 && line[length - 1] == '\n');
 
         /*
-         * A full buffer without a newline may indicate that the
-         * physical CSV row continues beyond the current buffer.
-         * Read one more character to distinguish a complete final
-         * row from an overlong row.
+         * fgets() may return only a chunk of a physical CSV row when the row
+         * is longer than the buffer. Do not feed the remaining chunks back
+         * through the parser as if they were separate records. Consume the
+         * rest of that physical row and report exactly one invalid record.
          */
         if (!hasNewline && length == sizeof(line) - 1) {
-            int ch = fgetc(file);
+            int next = fgetc(file);
 
-            if (ch != EOF) {
-                /* Discard the rest of this physical row. */
-                while (ch != '\n' && ch != EOF) {
-                    ch = fgetc(file);
+            if (next != EOF) {
+                while (next != '\n' && next != EOF) {
+                    next = fgetc(file);
                 }
-
+                lineNumber++;
                 fprintf(stderr,
-                        "Invalid station record at line %lu: row too long\n",
+                        "Invalid station record at line %lu (row too long)\n",
                         lineNumber);
-
                 overallStatus = APP_ERROR;
                 continue;
             }
-
-            if (ferror(file)) {
-                overallStatus = APP_ERROR;
-                break;
-            }
+            /* EOF immediately after the buffer: this is the final chunk,
+             * not a row with more unread data. Parse it normally below. */
         }
 
-        /* Remove the newline, if present. */
+        lineNumber++;
+
         if (hasNewline) {
-            line[--length] = '\0';
+            line[length - 1] = '\0';
         }
 
-        /* Support Windows CRLF line endings. */
+        length = strlen(line);
         if (length > 0 && line[length - 1] == '\r') {
-            line[--length] = '\0';
+            line[length - 1] = '\0';
         }
 
-        /* Skip the CSV header only when it is the first row. */
-        if (lineNumber == 1 &&
-            strcmp(line, "id,name,distance,fare,platform") == 0) {
+        if (lineNumber == 1 && strcmp(line, "id,name,distance,fare,platform") == 0) {
             continue;
         }
 
         if (!parseStation(line, &station)) {
-            fprintf(stderr,
-                    "Invalid station record at line %lu\n",
-                    lineNumber);
-
+            fprintf(stderr, "Invalid station record at line %lu\n", lineNumber);
             overallStatus = APP_ERROR;
             continue;
         }
@@ -212,10 +193,8 @@ AppStatus loadStationsFromCSV(StationNode **root, const char *filename)
             AppStatus status = insertStation(root, station);
 
             if (status != APP_SUCCESS) {
-                fprintf(stderr,
-                        "Could not load station ID %d at line %lu\n",
+                fprintf(stderr, "Could not load station ID %d at line %lu\n",
                         station.id, lineNumber);
-
                 overallStatus = status;
             }
         }
