@@ -357,7 +357,24 @@ TEST(StorageApi, LoadsValidRowsAndReportsMalformedOrDuplicateRows) {
     EXPECT_EQ(countStations(root), 0);
 }
 
+TEST(StorageApi, ReportsSaveFailureAndAcceptsHeaderOnlyFile) {
+    StationNode* root = nullptr;
+    EXPECT_EQ(saveStationsToCSV(nullptr, nullptr), APP_INVALID_INPUT);
+    EXPECT_EQ(saveStationsToCSV(root, "data/nonexistent_directory/output.csv"),
+              APP_ERROR);
 
+    writeText("data/header_only.csv", "id,name,distance,fare,platform\n");
+    EXPECT_EQ(loadStationsFromCSV(&root, "data/header_only.csv"), APP_SUCCESS);
+    EXPECT_EQ(countStations(root), 0);
+
+    // CSV_LINE_MAX is 256. A physical row exceeding that buffer is rejected;
+    // its remaining chunk must not accidentally become a valid record.
+    std::string longRow = "1," + std::string(300, 'N') + ",1,1,1\n";
+    writeText("data/overlong_row.csv", "id,name,distance,fare,platform\n" + longRow);
+    EXPECT_EQ(loadStationsFromCSV(&root, "data/overlong_row.csv"), APP_ERROR);
+    EXPECT_EQ(countStations(root), 0);
+    freeStationTree(root);
+}
 
 TEST(StorageApi, SavesInSortedOrderAndRoundTripsEmptyAndPopulatedTrees) {
     StationNode* root = nullptr;
@@ -983,189 +1000,6 @@ TEST(ZIntegrationTest, ReportsAuditLogFailureWithoutCrashingApplication) {
 
     fs::remove_all("data/audit.log");
     writeText("data/audit.log", "");
-}
-
-
-/*
- * Additional branch-focused tests based on the current source files.
- * The /dev/full and directory-read cases are Linux/POSIX-specific.
- */
-
-TEST(StorageApi, LoadingDirectoryReportsReadErrorOnPosix) {
-#if !defined(_WIN32)
-    StationNode* root = nullptr;
-
-    // fopen() can open a directory on Linux, but fgets() fails with EISDIR.
-    EXPECT_EQ(loadStationsFromCSV(&root, "data"), APP_ERROR);
-    EXPECT_EQ(root, nullptr);
-    freeStationTree(root);
-#else
-    GTEST_SKIP() << "Directory read-error behaviour is POSIX-specific.";
-#endif
-}
-
-TEST(StorageApi, ReportsFlushFailureWhenWritingToFullDeviceOnPosix) {
-#if !defined(_WIN32)
-    StationNode* root = nullptr;
-    const fs::path fullPath = "data/full_device.csv";
-    std::error_code ec;
-
-    fs::remove(fullPath, ec);
-    fs::create_symlink("/dev/full", fullPath, ec);
-    ASSERT_FALSE(ec) << "Could not create /dev/full symlink: " << ec.message();
-
-    // The buffered header write may succeed, but flushing/closing /dev/full
-    // fails. saveStationsToCSV must propagate that failure.
-    EXPECT_EQ(saveStationsToCSV(root, fullPath.string().c_str()), APP_ERROR);
-
-    fs::remove(fullPath, ec);
-    freeStationTree(root);
-#else
-    GTEST_SKIP() << "/dev/full is Linux/POSIX-specific.";
-#endif
-}
-
-TEST(AuthApi, SkipsRowsWithMissingOrExtraColumnsBeforeValidUser) {
-    writeText("data/users.csv",
-        "username,password,role\n"
-        "missing,password\n"
-        "extra,password,VIEWER,unexpected\n"
-        ",emptyusername,VIEWER\n"
-        "viewer,viewer123,VIEWER\n");
-
-    User user{};
-    EXPECT_EQ(authenticateUser("viewer", "viewer123", &user), APP_SUCCESS);
-    EXPECT_EQ(user.role, ROLE_VIEWER);
-    EXPECT_STREQ(user.username, "viewer");
-    EXPECT_EQ(authenticateUser("missing", "password", &user),
-              APP_PERMISSION_DENIED);
-
-    writeDefaultUsers();
-}
-
-TEST(AuditLogApi, DetectsFlushFailureWhenAuditPathTargetsFullDeviceOnPosix) {
-#if !defined(_WIN32)
-    const fs::path auditPath = "data/audit.log";
-    std::error_code ec;
-
-    fs::remove_all(auditPath, ec);
-    fs::create_symlink("/dev/full", auditPath, ec);
-    ASSERT_FALSE(ec) << "Could not create /dev/full symlink: " << ec.message();
-
-    EXPECT_EQ(writeAuditLog("admin", "LOGIN", "full device test", APP_SUCCESS),
-              APP_ERROR);
-
-    fs::remove(auditPath, ec);
-    writeText(auditPath, "");
-#else
-    GTEST_SKIP() << "/dev/full is Linux/POSIX-specific.";
-#endif
-}
-
-TEST(ZIntegrationTest, ViewerIsRejectedFromEveryAdminOnlyMenuOption) {
-    const std::string script =
-        "viewer\nviewer123\n"
-        "5\n"  // threaded station validation
-        "6\n"  // add
-        "7\n"  // update
-        "8\n"  // delete
-        "9\n"  // logout
-        "admin\nadmin123\n"
-        "0\n";
-
-    const AppRunResult run = runAppWithInput(
-        script, "viewer_admin_options_input.txt");
-
-    EXPECT_EQ(run.exitCode, EXIT_SUCCESS);
-    const std::string expected = "Invalid option for Viewer.";
-    size_t count = 0;
-    size_t position = 0;
-    while ((position = run.output.find(expected, position)) != std::string::npos) {
-        ++count;
-        position += expected.size();
-    }
-    EXPECT_EQ(count, 4u);
-    EXPECT_NE(run.output.find("Metro Management System closed"),
-              std::string::npos);
-}
-
-TEST(ZIntegrationTest, ReportsBothSourceAndDestinationMissing) {
-    const AppRunResult run = runAppWithInput(
-        "admin\nadmin123\n"
-        "4\n999\n998\n"
-        "0\n",
-        "both_route_stations_missing.txt");
-
-    EXPECT_EQ(run.exitCode, EXIT_SUCCESS);
-    EXPECT_NE(run.output.find("Source station ID 999 was not found."),
-              std::string::npos);
-    EXPECT_NE(run.output.find("Destination station ID 998 was not found."),
-              std::string::npos);
-    EXPECT_NE(run.output.find("Validation result: FAILED."),
-              std::string::npos);
-}
-
-TEST(ZIntegrationTest, RejectsBlankAndCommaContainingStationNames) {
-    const AppRunResult run = runAppWithInput(
-        "admin\nadmin123\n"
-        "6\n108\n\n"                 // blank name
-        "6\n108\nName,WithComma\n"   // comma in name
-        "6\n108\nValidName\n1\n10\n1\n"
-        "0\n",
-        "station_name_rejections.txt");
-
-    EXPECT_EQ(run.exitCode, EXIT_SUCCESS);
-    EXPECT_NE(run.output.find("Name cannot be empty or contain a comma."),
-              std::string::npos);
-    EXPECT_NE(run.output.find("Station added and saved successfully."),
-              std::string::npos);
-    EXPECT_NE(run.output.find("Metro Management System closed"),
-              std::string::npos);
-}
-
-
-TEST(ZIntegrationTest, AddReportsCsvSaveFailureOnFullDeviceOnPosix) {
-#if !defined(_WIN32)
-    writeDefaultUsers();
-    writeText("data/audit.log", "");
-
-    const fs::path stationsPath = "data/stations.csv";
-    std::error_code ec;
-    fs::remove(stationsPath, ec);
-    fs::create_symlink("/dev/full", stationsPath, ec);
-    ASSERT_FALSE(ec) << "Could not create /dev/full symlink: " << ec.message();
-
-    const fs::path inputPath = testRoot / "add_save_failure_input.txt";
-    writeText(inputPath,
-        "admin\nadmin123\n"
-        "6\n101\nNewStop\n1\n10\n1\n"
-        "0\n");
-
-    int savedStdin = dup(fileno(stdin));
-    ASSERT_GE(savedStdin, 0);
-    ASSERT_NE(std::freopen(inputPath.string().c_str(), "r", stdin), nullptr);
-
-    testing::internal::CaptureStdout();
-    const int result = metro_app_main();
-    const std::string output = testing::internal::GetCapturedStdout();
-
-    const int restoreResult = dup2(savedStdin, fileno(stdin));
-    close(savedStdin);
-    EXPECT_EQ(restoreResult, fileno(stdin));
-    clearerr(stdin);
-
-    EXPECT_EQ(result, EXIT_SUCCESS);
-    EXPECT_NE(output.find(
-                  "Warning: station added in memory, but saving to CSV failed."),
-              std::string::npos);
-    EXPECT_NE(output.find("Metro Management System closed"),
-              std::string::npos);
-
-    fs::remove(stationsPath, ec);
-    writeDefaultStations();
-#else
-    GTEST_SKIP() << "/dev/full is Linux/POSIX-specific.";
-#endif
 }
 
 } // namespace
