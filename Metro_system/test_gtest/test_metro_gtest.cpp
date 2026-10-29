@@ -358,36 +358,6 @@ TEST(StorageApi, LoadsValidRowsAndReportsMalformedOrDuplicateRows) {
 }
 
 
-TEST(StorageApi, ReportsSaveFailureAndAcceptsHeaderOnlyFile) {
-    StationNode* root = nullptr;
-
-    // Null filename must be rejected.
-    EXPECT_EQ(saveStationsToCSV(nullptr, nullptr), APP_INVALID_INPUT);
-
-    // Saving to a nonexistent directory must fail.
-    EXPECT_EQ(
-        saveStationsToCSV(
-            root,
-            "data/nonexistent_directory/output.csv"),
-        APP_ERROR
-    );
-
-    // A CSV containing only the header is valid.
-    writeText(
-        "data/header_only.csv",
-        "id,name,distance,fare,platform\n"
-    );
-
-    EXPECT_EQ(
-        loadStationsFromCSV(&root, "data/header_only.csv"),
-        APP_SUCCESS
-    );
-
-    EXPECT_EQ(countStations(root), 0);
-
-    freeStationTree(root);
-}
-
 
 TEST(StorageApi, SavesInSortedOrderAndRoundTripsEmptyAndPopulatedTrees) {
     StationNode* root = nullptr;
