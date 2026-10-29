@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include <cstdio>
+#include <algorithm>
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
@@ -762,6 +763,243 @@ TEST(ZIntegrationTest, FailsStartupWhenStationCsvContainsInvalidRecord) {
 
     EXPECT_EQ(result, EXIT_FAILURE);
     writeDefaultStations();
+}
+
+
+/*
+ * Helper for focused integration tests. Each call gets a fresh input stream
+ * and restores stdin afterwards so one test cannot consume another test's input.
+ */
+struct AppRunResult {
+    int exitCode;
+    std::string output;
+};
+
+AppRunResult runAppWithInput(const std::string& input,
+                             const std::string& filename) {
+    writeDefaultStations();
+    writeDefaultUsers();
+    // Replace an earlier audit.log directory/file with a clean log file.
+    std::error_code ec;
+    fs::remove_all("data/audit.log", ec);
+    writeText("data/audit.log", "");
+
+    const fs::path inputPath = testRoot / filename;
+    writeText(inputPath, input);
+
+#if defined(_WIN32)
+    int savedStdin = _dup(_fileno(stdin));
+#else
+    int savedStdin = dup(fileno(stdin));
+#endif
+    EXPECT_GE(savedStdin, 0);
+    if (savedStdin < 0) {
+        return {EXIT_FAILURE, ""};
+    }
+
+    if (std::freopen(inputPath.string().c_str(), "r", stdin) == nullptr) {
+#if defined(_WIN32)
+        _close(savedStdin);
+#else
+        close(savedStdin);
+#endif
+        ADD_FAILURE() << "Could not redirect stdin to " << inputPath.string();
+        return {EXIT_FAILURE, ""};
+    }
+
+    testing::internal::CaptureStdout();
+    const int result = metro_app_main();
+    const std::string output = testing::internal::GetCapturedStdout();
+
+#if defined(_WIN32)
+    const int restoreResult = _dup2(savedStdin, _fileno(stdin));
+    _close(savedStdin);
+    EXPECT_EQ(restoreResult, 0);
+#else
+    const int restoreResult = dup2(savedStdin, fileno(stdin));
+    close(savedStdin);
+    EXPECT_EQ(restoreResult, fileno(stdin));
+#endif
+    clearerr(stdin);
+
+    return {result, output};
+}
+
+TEST(ZIntegrationTest, ExitsCleanlyWhenInputEndsAtPasswordPrompt) {
+    const AppRunResult run = runAppWithInput(
+        "admin\n", "eof_password_input.txt");
+
+    EXPECT_EQ(run.exitCode, EXIT_SUCCESS);
+    EXPECT_NE(run.output.find("Username:"), std::string::npos);
+    EXPECT_NE(run.output.find("Password:"), std::string::npos);
+    EXPECT_NE(run.output.find("Metro Management System closed"),
+              std::string::npos);
+}
+
+TEST(ZIntegrationTest, ExitsCleanlyWhenInputEndsAtMenuPrompt) {
+    const AppRunResult run = runAppWithInput(
+        "admin\nadmin123\n", "eof_menu_input.txt");
+
+    EXPECT_EQ(run.exitCode, EXIT_SUCCESS);
+    EXPECT_NE(run.output.find("Welcome, admin"), std::string::npos);
+    EXPECT_NE(run.output.find("Choose an option:"), std::string::npos);
+    EXPECT_NE(run.output.find("Metro Management System closed"),
+              std::string::npos);
+}
+
+TEST(ZIntegrationTest, HandlesEofAtSourceAndDestinationPrompts) {
+    const AppRunResult sourceEof = runAppWithInput(
+        "admin\nadmin123\n4\n", "eof_source_input.txt");
+    EXPECT_EQ(sourceEof.exitCode, EXIT_SUCCESS);
+    EXPECT_NE(sourceEof.output.find("Enter source station ID:"),
+              std::string::npos);
+    EXPECT_NE(sourceEof.output.find("Metro Management System closed"),
+              std::string::npos);
+
+    const AppRunResult destinationEof = runAppWithInput(
+        "admin\nadmin123\n4\n101\n", "eof_destination_input.txt");
+    EXPECT_EQ(destinationEof.exitCode, EXIT_SUCCESS);
+    EXPECT_NE(destinationEof.output.find("Enter destination station ID:"),
+              std::string::npos);
+    EXPECT_NE(destinationEof.output.find("Metro Management System closed"),
+              std::string::npos);
+}
+
+TEST(ZIntegrationTest, EmptyTreeSummaryAndValidationPaths) {
+    std::string script =
+        "admin\nadmin123\n"
+        "8\n101\n"
+        "8\n102\n"
+        "8\n103\n"
+        "8\n104\n"
+        "8\n105\n"
+        "8\n106\n"
+        "3\n"  // summary for empty tree
+        "4\n"  // source/destination validation for empty tree
+        "5\n"  // multithreaded validation for empty tree
+        "0\n";
+
+    const AppRunResult run = runAppWithInput(script, "empty_tree_input.txt");
+    EXPECT_EQ(run.exitCode, EXIT_SUCCESS);
+    EXPECT_NE(run.output.find("Total stations: 0"), std::string::npos);
+    EXPECT_NE(run.output.find(
+                  "Minimum station ID: unavailable (tree is empty)"),
+              std::string::npos);
+    EXPECT_NE(run.output.find(
+                  "Maximum station ID: unavailable (tree is empty)"),
+              std::string::npos);
+    EXPECT_NE(run.output.find("Validation failed: No stations are available"),
+              std::string::npos);
+    EXPECT_NE(run.output.find("No stations are available"),
+              std::string::npos);
+    EXPECT_NE(run.output.find("Metro Management System closed"),
+              std::string::npos);
+}
+
+TEST(ZIntegrationTest, CoversIntegerAndFloatingPointParsingBoundaries) {
+    const std::string script =
+        "admin\nadmin123\n"
+        "2147483648\n"                 // beyond signed int range
+        "999999999999999999999999\n"   // strtol range error
+        "3\n"
+        "6\n108\nTemp\nnan\n"          // non-finite float
+        "6\n108\nTemp\ninf\n"          // non-finite float
+        "6\n108\nTemp\n12abc\n"        // trailing characters
+        "6\n108\nTemp\n1e9999\n"       // strtof range error
+        "6\n108\nTemp\n\n"             // empty float
+        "6\n108\nTemp\n1\n12\n0\n"     // non-positive platform
+        "0\n";
+
+    const AppRunResult run = runAppWithInput(script, "numeric_boundaries_input.txt");
+    EXPECT_EQ(run.exitCode, EXIT_SUCCESS);
+    EXPECT_NE(run.output.find("Invalid integer. Please try again."),
+              std::string::npos);
+    EXPECT_NE(run.output.find("Invalid number. Please try again."),
+              std::string::npos);
+    EXPECT_NE(run.output.find("Metro Management System closed"),
+              std::string::npos);
+}
+
+TEST(ZIntegrationTest, HandlesLongPasswordAndLongStationName) {
+    const std::string longPassword(200, 'p');
+    const std::string longName(200, 'N');
+    const std::string script =
+        "admin\n" + longPassword + "\n" // overlong password rejected
+        "admin\nadmin123\n"
+        "6\n108\n" + longName + "\n"   // overlong station name rejected
+        "6\n108\nValidName\n1\n10\n1\n"
+        "0\n";
+
+    const AppRunResult run = runAppWithInput(script, "long_input_boundaries.txt");
+    EXPECT_EQ(run.exitCode, EXIT_SUCCESS);
+    EXPECT_NE(run.output.find("Input is too long. Please try again."),
+              std::string::npos);
+    EXPECT_NE(run.output.find("Station added and saved successfully."),
+              std::string::npos);
+    EXPECT_NE(run.output.find("Metro Management System closed"),
+              std::string::npos);
+}
+
+TEST(ZIntegrationTest, HandlesInvalidSearchUpdateDeleteAndDestinationInputs) {
+    const std::string script =
+        "admin\nadmin123\n"
+        "2\nnot-an-id\n"       // invalid integer during search
+        "7\n101\nUpdated\nbad-distance\n" // invalid update field
+        "8\nabc\n"              // invalid integer during delete
+        "4\n101\n-2\n"          // non-positive destination ID
+        "4\nabc\n"             // invalid source integer, then EOF at menu
+        "0\n";
+
+    const AppRunResult run = runAppWithInput(script, "invalid_operation_inputs.txt");
+    EXPECT_EQ(run.exitCode, EXIT_SUCCESS);
+    EXPECT_NE(run.output.find("Invalid integer. Please try again."),
+              std::string::npos);
+    EXPECT_NE(run.output.find("Validation failed: Station IDs must be positive."),
+              std::string::npos);
+    EXPECT_NE(run.output.find("Metro Management System closed"),
+              std::string::npos);
+}
+
+TEST(ZIntegrationTest, ReportsAuditLogFailureWithoutCrashingApplication) {
+    writeDefaultStations();
+    writeDefaultUsers();
+    fs::remove_all("data/audit.log");
+    fs::create_directory("data/audit.log");
+
+    const fs::path inputPath = testRoot / "audit_failure_input.txt";
+    writeText(inputPath, "admin\nadmin123\n0\n");
+
+#if defined(_WIN32)
+    int savedStdin = _dup(_fileno(stdin));
+#else
+    int savedStdin = dup(fileno(stdin));
+#endif
+    ASSERT_GE(savedStdin, 0);
+    ASSERT_NE(std::freopen(inputPath.string().c_str(), "r", stdin), nullptr);
+
+    testing::internal::CaptureStderr();
+    testing::internal::CaptureStdout();
+    const int result = metro_app_main();
+    const std::string output = testing::internal::GetCapturedStdout();
+    const std::string errors = testing::internal::GetCapturedStderr();
+
+#if defined(_WIN32)
+    ASSERT_EQ(_dup2(savedStdin, _fileno(stdin)), 0);
+    _close(savedStdin);
+#else
+    ASSERT_EQ(dup2(savedStdin, fileno(stdin)), fileno(stdin));
+    close(savedStdin);
+#endif
+    clearerr(stdin);
+
+    EXPECT_EQ(result, EXIT_SUCCESS);
+    EXPECT_NE(output.find("Welcome, admin"), std::string::npos);
+    EXPECT_NE(output.find("Metro Management System closed"), std::string::npos);
+    EXPECT_NE(errors.find("Warning: could not write to the audit log."),
+              std::string::npos);
+
+    fs::remove_all("data/audit.log");
+    writeText("data/audit.log", "");
 }
 
 } // namespace
